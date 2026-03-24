@@ -8,6 +8,7 @@ let choosingPlayer = null;
 let amChoosing = false;
 let gameState = 'lobby';
 let finalTimerInterval = null;
+let answerTimerInterval = null;
 
 // ===== ИНИЦИАЛИЗАЦИЯ =====
 (function init() {
@@ -147,18 +148,26 @@ socket.on('question-show', (data) => {
   document.getElementById('q-answer-area').classList.add('hidden');
   document.getElementById('answering-info').classList.add('hidden');
 
+  // Скрываем поле ввода и кнопку
   const buzzerArea = document.getElementById('buzzer-area');
   const buzzerBtn = document.getElementById('buzzer-btn');
   const buzzerStatus = document.getElementById('buzzer-status');
+  const answerInputArea = document.getElementById('answer-input-area');
+
+  answerInputArea.classList.add('hidden');
+  clearAnswerTimer();
 
   if (data.catInBag && data.targetPlayer === myId) {
-    // Кот в мешке — я отвечаю
-    buzzerArea.classList.add('hidden');
-    buzzerStatus.textContent = 'Кот в мешке — вы отвечаете!';
+    buzzerArea.classList.remove('hidden');
+    buzzerBtn.classList.add('hidden');
+    buzzerStatus.textContent = '🐱 Кот в мешке — вы отвечаете!';
   } else if (data.auction) {
-    buzzerArea.classList.add('hidden');
+    buzzerArea.classList.remove('hidden');
+    buzzerBtn.classList.add('hidden');
+    buzzerStatus.textContent = '💰 Аукцион — ожидание...';
   } else {
     buzzerArea.classList.remove('hidden');
+    buzzerBtn.classList.remove('hidden');
     buzzerBtn.disabled = true;
     buzzerBtn.classList.remove('active');
     buzzerStatus.textContent = 'Ожидание...';
@@ -168,14 +177,12 @@ socket.on('question-show', (data) => {
 socket.on('buzzer-unlocked', () => {
   const buzzerBtn = document.getElementById('buzzer-btn');
   const buzzerStatus = document.getElementById('buzzer-status');
-  const buzzerArea = document.getElementById('buzzer-area');
 
-  buzzerArea.classList.remove('hidden');
+  buzzerBtn.classList.remove('hidden');
   buzzerBtn.disabled = false;
   buzzerBtn.classList.add('active');
-  buzzerStatus.textContent = '🔔 Жмите кнопку!';
+  buzzerStatus.textContent = '🔔 Жмите кнопку, чтобы ответить!';
 
-  // Вибрация на мобильных
   if (navigator.vibrate) navigator.vibrate(100);
 });
 
@@ -186,38 +193,139 @@ function pressBuzzer() {
   buzzerBtn.classList.remove('active');
   document.getElementById('buzzer-status').textContent = '⏳ Ожидание...';
 
-  // Вибрация
   if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
 }
 
-// Обработка пробела/Enter для buzzer
+// Пробел/Enter для buzzer
 document.addEventListener('keydown', (e) => {
-  if ((e.key === ' ' || e.key === 'Enter') && gameState === 'question') {
+  if (e.key === ' ' && gameState === 'question') {
     const buzzerBtn = document.getElementById('buzzer-btn');
-    if (buzzerBtn && !buzzerBtn.disabled) {
+    if (buzzerBtn && !buzzerBtn.disabled && !buzzerBtn.classList.contains('hidden')) {
       e.preventDefault();
       pressBuzzer();
     }
   }
 });
 
+// ===== ОТВЕТ ИГРОКА =====
 socket.on('player-answering', (data) => {
   document.getElementById('answering-info').classList.remove('hidden');
-  document.getElementById('answering-player-name').textContent =
-    data.playerId === myId ? 'ВЫ' : data.playerName;
 
   const buzzerBtn = document.getElementById('buzzer-btn');
   buzzerBtn.disabled = true;
   buzzerBtn.classList.remove('active');
-  document.getElementById('buzzer-status').textContent =
-    data.playerId === myId ? '🎤 Ваш ответ!' : `${data.playerName} отвечает...`;
+
+  if (data.playerId === myId) {
+    // Я отвечаю — показываем поле ввода
+    document.getElementById('answering-player-name').textContent = 'ВЫ';
+    document.getElementById('buzzer-status').textContent = '🎤 Введите ваш ответ!';
+
+    buzzerBtn.classList.add('hidden');
+
+    const answerInputArea = document.getElementById('answer-input-area');
+    answerInputArea.classList.remove('hidden');
+
+    const input = document.getElementById('answer-text-input');
+    input.value = '';
+    input.disabled = false;
+    input.focus();
+
+    document.getElementById('send-answer-btn').disabled = false;
+
+    // Таймер 20 секунд на ответ
+    startAnswerTimer(20);
+
+  } else {
+    // Другой игрок отвечает
+    document.getElementById('answering-player-name').textContent = data.playerName;
+    document.getElementById('buzzer-status').textContent = `${data.playerName} пишет ответ...`;
+    document.getElementById('answer-input-area').classList.add('hidden');
+  }
 
   highlightPlayer(data.playerId, 'answering');
 });
 
+function sendTextAnswer() {
+  const input = document.getElementById('answer-text-input');
+  const answer = input.value.trim();
+
+  if (!answer) {
+    showNotification('Введите ответ!', 'error');
+    input.focus();
+    return;
+  }
+
+  // Отправляем ответ на сервер
+  socket.emit('text-answer', { answer: answer });
+
+  // Блокируем ввод
+  input.disabled = true;
+  document.getElementById('send-answer-btn').disabled = true;
+  document.getElementById('buzzer-status').textContent = '📩 Ответ отправлен! Ожидание...';
+
+  clearAnswerTimer();
+
+  if (navigator.vibrate) navigator.vibrate(100);
+}
+
+// Enter для отправки ответа
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    const answerInput = document.getElementById('answer-text-input');
+    const answerArea = document.getElementById('answer-input-area');
+    if (answerArea && !answerArea.classList.contains('hidden') && !answerInput.disabled) {
+      e.preventDefault();
+      sendTextAnswer();
+    }
+  }
+});
+
+function startAnswerTimer(seconds) {
+  clearAnswerTimer();
+  let timeLeft = seconds;
+  const timerEl = document.getElementById('answer-timer');
+  timerEl.textContent = timeLeft;
+  timerEl.classList.remove('warning');
+
+  answerTimerInterval = setInterval(() => {
+    timeLeft--;
+    timerEl.textContent = timeLeft;
+
+    if (timeLeft <= 5) {
+      timerEl.classList.add('warning');
+    }
+
+    if (timeLeft <= 0) {
+      clearAnswerTimer();
+      // Авто-отправка пустого ответа
+      const input = document.getElementById('answer-text-input');
+      if (!input.disabled) {
+        sendTextAnswer();
+      }
+    }
+  }, 1000);
+}
+
+function clearAnswerTimer() {
+  if (answerTimerInterval) {
+    clearInterval(answerTimerInterval);
+    answerTimerInterval = null;
+  }
+  const timerEl = document.getElementById('answer-timer');
+  if (timerEl) {
+    timerEl.textContent = '';
+    timerEl.classList.remove('warning');
+  }
+}
+
+// ===== РЕЗУЛЬТАТЫ ОТВЕТА =====
 socket.on('answer-result', (data) => {
   players = data.players;
   renderPlayersBar();
+  clearAnswerTimer();
+
+  // Скрываем поле ввода
+  document.getElementById('answer-input-area').classList.add('hidden');
 
   if (data.correct) {
     showNotification(`✅ ${data.playerName} +${data.value}!`, 'success');
@@ -231,18 +339,23 @@ socket.on('answer-result', (data) => {
   }
 
   if (data.correct && data.answer) {
-    document.getElementById('q-answer-area').classList.remove('hidden');
-    document.getElementById('q-answer').textContent = data.answer;
+    setTimeout(() => {
+      document.getElementById('q-answer-area').classList.remove('hidden');
+      document.getElementById('q-answer').textContent = data.answer;
+    }, 500);
   }
 });
 
 socket.on('answer-timeout', () => {
   showNotification('⏰ Время вышло!', 'warning');
+  clearAnswerTimer();
+  document.getElementById('answer-input-area').classList.add('hidden');
 });
 
 socket.on('question-end', (data) => {
   players = data.players;
   renderPlayersBar();
+  clearAnswerTimer();
 
   document.getElementById('q-answer-area').classList.remove('hidden');
   document.getElementById('q-answer').textContent = data.answer;
@@ -251,6 +364,7 @@ socket.on('question-end', (data) => {
   buzzerBtn.disabled = true;
   buzzerBtn.classList.remove('active');
   document.getElementById('buzzer-status').textContent = 'Вопрос завершён';
+  document.getElementById('answer-input-area').classList.add('hidden');
 });
 
 // ===== ДОСКА (обновление) =====
@@ -285,12 +399,11 @@ socket.on('cat-in-bag', (data) => {
   const selectArea = document.getElementById('cat-select-area');
 
   if (data.choosingPlayer === myId) {
-    // Я выбираю, кому отдать
     let html = '<div style="margin-top: 20px; font-size: 18px;">Выберите игрока:</div>';
     html += '<div class="player-select-grid">';
 
     data.players.forEach(p => {
-      if (p.id === myId) return; // Нельзя себе
+      if (p.id === myId) return;
       html += `
         <div class="player-select-btn" onclick="selectCatPlayer('${p.id}')">
           <div class="name">${escapeHtml(p.name)}</div>
@@ -367,15 +480,12 @@ socket.on('auction-result', (data) => {
   );
 });
 
-socket.on('auction-bet-placed', () => {
-  // Обновление статуса
-});
+socket.on('auction-bet-placed', () => {});
 
 // ===== КОНЕЦ РАУНДА =====
 socket.on('round-complete', (data) => {
   players = data.players;
   showNotification('🏁 Раунд завершён!', 'info', 3000);
-  // Ведущий запустит следующий раунд
 });
 
 socket.on('new-round', (data) => {
@@ -450,7 +560,6 @@ socket.on('final-question', (data) => {
 
   document.getElementById('final-q-text').textContent = data.text;
 
-  // Таймер
   let timeLeft = data.timeLimit;
   const timerEl = document.getElementById('final-timer');
   timerEl.textContent = timeLeft;
@@ -462,7 +571,6 @@ socket.on('final-question', (data) => {
     if (timeLeft <= 10) timerEl.style.color = 'var(--danger)';
     if (timeLeft <= 0) {
       clearInterval(finalTimerInterval);
-      // Автоматически отправляем ответ
       submitFinalAnswer();
     }
   }, 1000);
@@ -492,6 +600,7 @@ socket.on('final-waiting', (data) => {
 // ===== РЕЗУЛЬТАТЫ =====
 socket.on('game-over', (data) => {
   if (finalTimerInterval) clearInterval(finalTimerInterval);
+  clearAnswerTimer();
 
   hideAllScreens();
   const screen = document.getElementById('results-screen');
@@ -499,7 +608,6 @@ socket.on('game-over', (data) => {
 
   let html = `<div class="results-title">🏆 Итоги игры</div>`;
 
-  // Подиум
   if (data.players.length >= 1) {
     html += '<div class="podium">';
 
@@ -535,7 +643,6 @@ socket.on('game-over', (data) => {
     html += '</div>';
   }
 
-  // Таблица
   html += '<div style="max-width: 500px; width: 100%;">';
   data.players.forEach((p, i) => {
     const isMe = p.id === myId;
@@ -558,7 +665,6 @@ socket.on('game-over', (data) => {
 
   screen.innerHTML = html;
 
-  // Победная вибрация
   if (data.players[0]?.id === myId && navigator.vibrate) {
     navigator.vibrate([200, 100, 200, 100, 200]);
   }
@@ -653,7 +759,7 @@ function showNotification(message, type = 'info', duration = 3000) {
   setTimeout(() => notif.remove(), duration);
 }
 
-// ===== ОБРАБОТКА ОШИБОК =====
+// ===== ОШИБКИ =====
 socket.on('error-msg', (data) => {
   showNotification(data.message, 'error');
 });
@@ -672,7 +778,6 @@ socket.on('disconnect', () => {
 });
 
 socket.on('connect', () => {
-  // Пытаемся переподключиться
   if (roomId && myName) {
     socket.emit('join-room', { roomId, name: myName });
   }
