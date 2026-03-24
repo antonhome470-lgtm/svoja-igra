@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Своя Игра — Игрок</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="stars"></div>
+
+  <!-- Шапка -->
+  <div class="header">
+    <div class="logo">
+      <span class="star">⭐</span>
+      СВОЯ ИГРА
+    </div>
+    <div class="room-info">
+      <div class="room-code" id="room-code" title="Код комнаты">---</div>
+      <span id="my-name" style="color: var(--secondary); font-weight: bold;"></span>
+    </div>
+  </div>
+
+  <div id="app">
+    <!-- Лобби -->
+    <div id="lobby" class="lobby-container">
+      <div class="lobby-title">Ожидание начала игры</div>
+      <div class="players-grid" id="lobby-players"></div>
+      <div class="waiting-text">Ведущий скоро начнёт игру...</div>
+    </div>
+
+    <!-- Игровая доска -->
+    <div id="game-board-screen" class="hidden">
+      <div class="game-container">
+        <div class="game-board">
+          <div class="round-title" id="round-title">Первый раунд</div>
+          <div class="choosing-info" id="choosing-info"></div>
+          <table class="board-table" id="board-table"></table>
+        </div>
+        <div class="players-bar" id="players-bar"></div>
+      </div>
+    </div>
+
+    <!-- Вопрос -->
+    <div id="question-screen" class="question-overlay hidden">
+      <div class="question-category" id="q-category"></div>
+      <div class="question-value" id="q-value"></div>
+      <div class="question-text" id="q-text"></div>
+
+      <div id="q-answer-area" class="hidden">
+        <div class="question-answer" id="q-answer"></div>
+      </div>
+
+      <div id="answering-info" class="hidden" style="margin-top: 20px;">
+        <div style="font-size: 20px; color: var(--secondary);">
+          Отвечает: <strong id="answering-player-name"></strong>
+        </div>
+      </div>
+
+      <div class="buzzer-area" id="buzzer-area">
+        <div class="buzzer-status" id="buzzer-status">Ожидание...</div>
+        <button class="btn-buzzer" id="buzzer-btn" disabled onclick="pressBuzzer()">
+          ОТВЕТИТЬ
+        </button>
+      </div>
+    </div>
+
+    <!-- Кот в мешке (для выбирающего игрока) -->
+    <div id="cat-screen" class="special-overlay hidden">
+      <div class="cat-bag-icon">🐱</div>
+      <div class="special-title">Кот в мешке!</div>
+      <div class="special-subtitle" id="cat-theme"></div>
+      <div class="special-subtitle" id="cat-value"></div>
+      <div id="cat-select-area"></div>
+    </div>
+
+    <!-- Аукцион -->
+    <div id="auction-screen" class="special-overlay hidden">
+      <div class="special-title">💰 Вопрос-аукцион!</div>
+      <div class="special-subtitle" id="auction-info"></div>
+      <div class="auction-container" id="auction-controls">
+        <div class="auction-input-group">
+          <input type="number" class="auction-input" id="auction-bet-input" min="0" placeholder="Ставка">
+        </div>
+        <div style="display: flex; gap: 10px; justify-content: center; margin-top: 15px; flex-wrap: wrap;">
+          <button class="btn btn-primary" onclick="placeBet()">Сделать ставку</button>
+          <button class="btn btn-secondary" onclick="allIn()">Ва-банк</button>
+          <button class="btn btn-danger" onclick="passBet()">Пас</button>
+        </div>
+      </div>
+      <div id="auction-waiting" class="hidden" style="margin-top: 20px; color: var(--text-secondary);">
+        Ваша ставка принята. Ожидание других игроков...
+      </div>
+    </div>
+
+    <!-- Финальный раунд -->
+    <div id="final-screen" class="final-container hidden">
+      <div class="special-title">🏆 Финальный раунд</div>
+      <div class="final-theme" id="final-theme"></div>
+
+      <!-- Ставка -->
+      <div id="final-bet-area">
+        <div style="font-size: 18px; margin-bottom: 15px; color: var(--text-secondary);">
+          Ваши очки: <strong id="my-score-final" style="color: var(--secondary);"></strong>
+        </div>
+        <input type="number" class="final-input" id="final-bet-input" min="0" placeholder="Ваша ставка">
+        <button class="btn btn-primary btn-large" onclick="placeFinalBet()">
+          Сделать ставку
+        </button>
+      </div>
+
+      <!-- Вопрос + ответ -->
+      <div id="final-question-area" class="hidden">
+        <div class="question-text" id="final-q-text" style="font-size: 28px; margin: 30px 0;"></div>
+        <input type="text" class="final-input" id="final-answer-input" placeholder="Ваш ответ..." maxlength="200">
+        <button class="btn btn-primary btn-large" onclick="submitFinalAnswer()">
+          Отправить ответ
+        </button>
+        <div id="final-timer" class="final-timer"></div>
+      </div>
+
+      <!-- Ожидание -->
+      <div id="final-waiting-area" class="hidden">
+        <div style="font-size: 20px; color: var(--text-secondary); animation: pulse 2s infinite;">
+          Ожидание результатов...
+        </div>
+      </div>
+    </div>
+
+    <!-- Результаты -->
+    <div id="results-screen" class="results-container hidden"></div>
+  </div>
+
+  <!-- Чат -->
+  <div class="chat-container minimized" id="chat">
+    <div class="chat-header" onclick="toggleChat()">
+      <h3>💬 Чат</h3>
+      <button class="chat-toggle" id="chat-toggle-btn">+</button>
+    </div>
+    <div class="chat-messages" id="chat-messages"></div>
+    <div class="chat-input-area">
+      <input type="text" class="chat-input" id="chat-input" placeholder="Сообщение..." maxlength="200">
+      <button class="chat-send" onclick="sendChat()">→</button>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/game.js"></script>
+</body>
+</html>
