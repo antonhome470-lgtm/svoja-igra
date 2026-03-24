@@ -200,6 +200,32 @@ socket.on('player-answering', (data) => {
   // Подсвечиваем игрока
   highlightPlayer(data.playerId, 'answering');
 });
+// Получаем текстовый ответ игрока
+socket.on('player-text-answer', (data) => {
+  // Показываем ответ игрока на экране ведущего
+  const answeringInfo = document.getElementById('answering-info');
+  answeringInfo.classList.remove('hidden');
+
+  // Добавляем отображение ответа игрока
+  let answerDisplay = document.getElementById('player-answer-box');
+  if (!answerDisplay) {
+    answerDisplay = document.createElement('div');
+    answerDisplay.id = 'player-answer-box';
+    answerDisplay.className = 'player-answer-display';
+    answeringInfo.appendChild(answerDisplay);
+  }
+
+  answerDisplay.innerHTML = `
+    <div class="label">Ответ ${escapeHtml(data.playerName)}:</div>
+    <div class="answer">"${escapeHtml(data.answer)}"</div>
+  `;
+
+  // Показываем кнопки оценки
+  document.getElementById('judge-buttons').classList.remove('hidden');
+  document.getElementById('judge-buttons').style.display = 'flex';
+
+  showNotification(`📩 ${data.playerName} ответил: "${data.answer}"`, 'info', 5000);
+});
 
 function judgeAnswer(correct) {
   socket.emit('judge-answer', { correct });
