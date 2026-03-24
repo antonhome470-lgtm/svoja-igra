@@ -334,14 +334,44 @@ socket.on('cat-in-bag', (data) => {
   const container = document.getElementById('cat-players');
   container.innerHTML = '';
 
+  console.log('Кот в мешке. Все игроки:', data.players);
+  console.log('Выбирающий:', data.choosingPlayer);
+
+  // Ведущий выбирает кому отдать — показываем ВСЕХ кроме того, кто выбрал
   data.players.forEach(p => {
-    if (p.id === data.choosingPlayer) return;
+    // Пропускаем того, кто выбрал этот вопрос
+    const playerId = p.id || p.sessionId;
+    if (playerId === data.choosingPlayer) return;
+
     const btn = document.createElement('div');
     btn.className = 'player-select-btn';
-    btn.innerHTML = `<div class="name">${escapeHtml(p.name)}</div><div class="score">${p.score}</div>`;
-    btn.onclick = () => socket.emit('cat-select-player', { playerId: p.id });
+    btn.innerHTML = `
+      <div class="name">${escapeHtml(p.name)}</div>
+      <div class="score">${p.score}</div>
+    `;
+    btn.onclick = () => {
+      socket.emit('cat-select-player', { playerId: playerId });
+    };
     container.appendChild(btn);
   });
+
+  // Если после фильтрации никого нет (1 игрок в игре) — 
+  // показываем всех включая выбравшего
+  if (container.children.length === 0) {
+    data.players.forEach(p => {
+      const playerId = p.id || p.sessionId;
+      const btn = document.createElement('div');
+      btn.className = 'player-select-btn';
+      btn.innerHTML = `
+        <div class="name">${escapeHtml(p.name)}</div>
+        <div class="score">${p.score}</div>
+      `;
+      btn.onclick = () => {
+        socket.emit('cat-select-player', { playerId: playerId });
+      };
+      container.appendChild(btn);
+    });
+  }
 });
 
 // ===== АУКЦИОН =====
