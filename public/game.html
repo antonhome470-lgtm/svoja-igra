@@ -58,12 +58,25 @@
       </div>
 
       <div class="buzzer-area" id="buzzer-area">
-        <div class="buzzer-status" id="buzzer-status">Ожидание...</div>
-        <button class="btn-buzzer" id="buzzer-btn" disabled onclick="pressBuzzer()">
-          ОТВЕТИТЬ
-        </button>
-      </div>
+  <div class="buzzer-status" id="buzzer-status">Ожидание...</div>
+  <button class="btn-buzzer" id="buzzer-btn" disabled onclick="pressBuzzer()">
+    ОТВЕТИТЬ
+  </button>
+
+  <!-- НОВОЕ: Поле для текстового ответа -->
+  <div id="answer-input-area" class="hidden" style="margin-top: 20px; width: 100%; max-width: 500px;">
+    <div style="font-size: 18px; color: var(--secondary); margin-bottom: 10px;">
+      ✏️ Введите ваш ответ:
     </div>
+    <input type="text" id="answer-text-input" class="answer-text-input"
+           placeholder="Ваш ответ..." maxlength="200" autocomplete="off">
+    <button class="btn btn-primary btn-full" onclick="sendTextAnswer()"
+            id="send-answer-btn" style="margin-top: 10px;">
+      📩 Отправить ответ
+    </button>
+    <div id="answer-timer" class="answer-timer"></div>
+  </div>
+</div>
 
     <!-- Кот в мешке (для выбирающего игрока) -->
     <div id="cat-screen" class="special-overlay hidden">
