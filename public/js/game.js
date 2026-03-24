@@ -1,14 +1,20 @@
-const socket = io();
+const socket = io({
+  reconnection: true,
+  reconnectionAttempts: 50,
+  reconnectionDelay: 1000,
+  reconnectionDelayMax: 5000
+});
 
 let roomId = null;
 let myName = '';
-let myId = null;
+let myId = null; // это sessionId
 let players = [];
 let choosingPlayer = null;
 let amChoosing = false;
 let gameState = 'lobby';
 let finalTimerInterval = null;
 let answerTimerInterval = null;
+let sessionId = null;
 
 // ===== ИНИЦИАЛИЗАЦИЯ =====
 (function init() {
@@ -24,15 +30,73 @@ let answerTimerInterval = null;
   document.getElementById('room-code').textContent = roomId;
   document.getElementById('my-name').textContent = myName;
 
-  socket.emit('join-room', { roomId, name: myName });
+  // Проверяем, есть ли сохранённая сессия
+  sessionId = localStorage.getItem(`session_${roomId}`);
+
+  if (sessionId) {
+    // Пытаемся переподключиться
+    console.log('Пробуем переподключение, sessionId:', sessionId);
+    socket.emit('player-reconnect', { sessionId, roomId });
+  } else {
+    // Новый вход
+    socket.emit('join-room', { roomId, name: myName });
+  }
 })();
 
 // ===== ПРИСОЕДИНЕНИЕ =====
 socket.on('joined-room', (data) => {
-  myId = socket.id;
+  sessionId = data.sessionId;
+  myId = data.sessionId;
   players = data.players;
+
+  // Сохраняем сессию
+  localStorage.setItem(`session_${roomId}`, sessionId);
+  localStorage.setItem(`name_${roomId}`, myName);
+
   renderLobbyPlayers();
   showNotification('Вы присоединились к игре!', 'success');
+});
+
+// ===== ПЕРЕПОДКЛЮЧЕНИЕ =====
+socket.on('reconnected', (data) => {
+  sessionId = data.sessionId;
+  myId = data.sessionId;
+  myName = data.playerName;
+
+  localStorage.setItem(`session_${roomId}`, sessionId);
+
+  document.getElementById('my-name').textContent = myName;
+  showNotification('🔄 Вы вернулись в игру!', 'success', 3000);
+});
+
+socket.on('reconnect-failed', (data) => {
+  console.log('Переподключение не удалось:', data.message);
+  // Очищаем старую сессию и входим заново
+  localStorage.removeItem(`session_${roomId}`);
+  sessionId = null;
+  socket.emit('join-room', { roomId, name: myName });
+});
+
+socket.on('player-reconnected', (data) => {
+  showNotification(`🔄 ${data.playerName} вернулся в игру`, 'info', 2000);
+});
+
+// Авто-переподключение при потере связи
+socket.on('connect', () => {
+  console.log('Socket подключён:', socket.id);
+  if (sessionId && roomId) {
+    console.log('Авто-переподключение...');
+    socket.emit('player-reconnect', { sessionId, roomId });
+  }
+});
+
+socket.on('disconnect', (reason) => {
+  console.log('Отключение:', reason);
+  showNotification('⚠️ Соединение потеряно. Переподключение...', 'error', 5000);
+});
+
+socket.on('reconnect_attempt', (attemptNumber) => {
+  showNotification(`🔄 Переподключение... (${attemptNumber})`, 'info', 2000);
 });
 
 socket.on('players-update', (data) => {
@@ -47,13 +111,15 @@ function renderLobbyPlayers() {
   container.innerHTML = '';
 
   players.forEach(p => {
+    const isMe = p.id === myId || p.sessionId === myId;
     const card = document.createElement('div');
-    card.className = `player-card ${p.id === myId ? 'choosing' : ''} ${p.connected ? '' : 'disconnected'}`;
-    card.style.borderColor = p.id === myId ? 'var(--secondary)' : '';
+    card.className = `player-card ${isMe ? 'choosing' : ''} ${p.connected ? '' : 'disconnected'}`;
+    card.style.borderColor = isMe ? 'var(--secondary)' : '';
     card.innerHTML = `
       <div class="player-avatar" style="background: ${p.avatarColor}">${p.name[0].toUpperCase()}</div>
-      <div class="player-name">${escapeHtml(p.name)} ${p.id === myId ? '(Вы)' : ''}</div>
+      <div class="player-name">${escapeHtml(p.name)} ${isMe ? '(Вы)' : ''}</div>
       <div class="player-score">${p.score}</div>
+      ${!p.connected ? '<div style="color: var(--danger); font-size: 12px;">Отключён</div>' : ''}
     `;
     container.appendChild(card);
   });
@@ -105,8 +171,6 @@ function renderBoard(round, roundIndex) {
       if (!q.answered && amChoosing) {
         td.onclick = () => selectQuestion(ci, qi);
         td.style.cursor = 'pointer';
-      } else if (!q.answered) {
-        td.style.cursor = 'default';
       }
 
       row.appendChild(td);
@@ -148,7 +212,6 @@ socket.on('question-show', (data) => {
   document.getElementById('q-answer-area').classList.add('hidden');
   document.getElementById('answering-info').classList.add('hidden');
 
-  // Скрываем поле ввода и кнопку
   const buzzerArea = document.getElementById('buzzer-area');
   const buzzerBtn = document.getElementById('buzzer-btn');
   const buzzerStatus = document.getElementById('buzzer-status');
@@ -196,7 +259,6 @@ function pressBuzzer() {
   if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
 }
 
-// Пробел/Enter для buzzer
 document.addEventListener('keydown', (e) => {
   if (e.key === ' ' && gameState === 'question') {
     const buzzerBtn = document.getElementById('buzzer-btn');
@@ -207,7 +269,7 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-// ===== ОТВЕТ ИГРОКА =====
+// ===== ОТВЕТ =====
 socket.on('player-answering', (data) => {
   document.getElementById('answering-info').classList.remove('hidden');
 
@@ -215,11 +277,11 @@ socket.on('player-answering', (data) => {
   buzzerBtn.disabled = true;
   buzzerBtn.classList.remove('active');
 
-  if (data.playerId === myId) {
-    // Я отвечаю — показываем поле ввода
+  const isMe = data.playerId === myId;
+
+  if (isMe) {
     document.getElementById('answering-player-name').textContent = 'ВЫ';
     document.getElementById('buzzer-status').textContent = '🎤 Введите ваш ответ!';
-
     buzzerBtn.classList.add('hidden');
 
     const answerInputArea = document.getElementById('answer-input-area');
@@ -231,12 +293,8 @@ socket.on('player-answering', (data) => {
     input.focus();
 
     document.getElementById('send-answer-btn').disabled = false;
-
-    // Таймер 20 секунд на ответ
     startAnswerTimer(20);
-
   } else {
-    // Другой игрок отвечает
     document.getElementById('answering-player-name').textContent = data.playerName;
     document.getElementById('buzzer-status').textContent = `${data.playerName} пишет ответ...`;
     document.getElementById('answer-input-area').classList.add('hidden');
@@ -255,20 +313,16 @@ function sendTextAnswer() {
     return;
   }
 
-  // Отправляем ответ на сервер
-  socket.emit('text-answer', { answer: answer });
+  socket.emit('text-answer', { answer });
 
-  // Блокируем ввод
   input.disabled = true;
   document.getElementById('send-answer-btn').disabled = true;
   document.getElementById('buzzer-status').textContent = '📩 Ответ отправлен! Ожидание...';
 
   clearAnswerTimer();
-
   if (navigator.vibrate) navigator.vibrate(100);
 }
 
-// Enter для отправки ответа
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
     const answerInput = document.getElementById('answer-text-input');
@@ -290,18 +344,11 @@ function startAnswerTimer(seconds) {
   answerTimerInterval = setInterval(() => {
     timeLeft--;
     timerEl.textContent = timeLeft;
-
-    if (timeLeft <= 5) {
-      timerEl.classList.add('warning');
-    }
-
+    if (timeLeft <= 5) timerEl.classList.add('warning');
     if (timeLeft <= 0) {
       clearAnswerTimer();
-      // Авто-отправка пустого ответа
       const input = document.getElementById('answer-text-input');
-      if (!input.disabled) {
-        sendTextAnswer();
-      }
+      if (!input.disabled) sendTextAnswer();
     }
   }, 1000);
 }
@@ -318,21 +365,17 @@ function clearAnswerTimer() {
   }
 }
 
-// ===== РЕЗУЛЬТАТЫ ОТВЕТА =====
+// ===== РЕЗУЛЬТАТЫ =====
 socket.on('answer-result', (data) => {
   players = data.players;
   renderPlayersBar();
   clearAnswerTimer();
-
-  // Скрываем поле ввода
   document.getElementById('answer-input-area').classList.add('hidden');
 
   if (data.correct) {
     showNotification(`✅ ${data.playerName} +${data.value}!`, 'success');
     highlightPlayer(data.playerId, 'correct');
-    if (data.playerId === myId) {
-      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-    }
+    if (data.playerId === myId && navigator.vibrate) navigator.vibrate([200, 100, 200]);
   } else {
     showNotification(`❌ ${data.playerName} ${data.value}`, 'error');
     highlightPlayer(data.playerId, 'wrong');
@@ -367,7 +410,7 @@ socket.on('question-end', (data) => {
   document.getElementById('answer-input-area').classList.add('hidden');
 });
 
-// ===== ДОСКА (обновление) =====
+// ===== ДОСКА ОБНОВЛЕНИЕ =====
 socket.on('show-board', (data) => {
   gameState = 'playing';
   players = data.players;
@@ -401,7 +444,6 @@ socket.on('cat-in-bag', (data) => {
   if (data.choosingPlayer === myId) {
     let html = '<div style="margin-top: 20px; font-size: 18px;">Выберите игрока:</div>';
     html += '<div class="player-select-grid">';
-
     data.players.forEach(p => {
       if (p.id === myId) return;
       html += `
@@ -411,7 +453,6 @@ socket.on('cat-in-bag', (data) => {
         </div>
       `;
     });
-
     html += '</div>';
     selectArea.innerHTML = html;
   } else {
@@ -433,9 +474,7 @@ socket.on('auction-start', (data) => {
   const screen = document.getElementById('auction-screen');
   screen.classList.remove('hidden');
 
-  document.getElementById('auction-info').textContent =
-    `Минимальная ставка: ${data.value}`;
-
+  document.getElementById('auction-info').textContent = `Минимальная ставка: ${data.value}`;
   document.getElementById('auction-controls').classList.remove('hidden');
   document.getElementById('auction-waiting').classList.add('hidden');
 
@@ -461,28 +500,26 @@ function allIn() {
   socket.emit('auction-bet', { allIn: true });
   document.getElementById('auction-controls').classList.add('hidden');
   document.getElementById('auction-waiting').classList.remove('hidden');
-  showNotification('💰 Ва-банк!', 'info');
 }
 
 function passBet() {
   socket.emit('auction-bet', { pass: true });
   document.getElementById('auction-controls').classList.add('hidden');
   document.getElementById('auction-waiting').classList.remove('hidden');
-  showNotification('Вы спасовали', 'info');
 }
 
 socket.on('auction-result', (data) => {
   showNotification(
     data.winnerId === myId
-      ? `💰 Вы выиграли аукцион! Ставка: ${data.bet}`
-      : `💰 ${data.winnerName} выигрывает аукцион: ${data.bet}`,
+      ? `💰 Вы выиграли аукцион: ${data.bet}`
+      : `💰 ${data.winnerName}: ${data.bet}`,
     'info', 3000
   );
 });
 
 socket.on('auction-bet-placed', () => {});
 
-// ===== КОНЕЦ РАУНДА =====
+// ===== РАУНДЫ =====
 socket.on('round-complete', (data) => {
   players = data.players;
   showNotification('🏁 Раунд завершён!', 'info', 3000);
@@ -502,18 +539,13 @@ socket.on('new-round', (data) => {
   updateChoosingInfo(data.choosingPlayerName);
 
   showNotification(`🎯 ${data.round.name}`, 'info', 3000);
-
-  if (amChoosing) {
-    showNotification('🎯 Ваша очередь выбирать вопрос!', 'info', 3000);
-  }
+  if (amChoosing) showNotification('Ваша очередь!', 'info', 3000);
 });
 
-// ===== ФИНАЛЬНЫЙ РАУНД =====
+// ===== ФИНАЛ =====
 socket.on('final-round', (data) => {
   hideAllScreens();
-  const screen = document.getElementById('final-screen');
-  screen.classList.remove('hidden');
-
+  document.getElementById('final-screen').classList.remove('hidden');
   document.getElementById('final-theme').textContent = `Тема: ${data.theme}`;
 
   players = data.players;
@@ -539,25 +571,24 @@ socket.on('final-round', (data) => {
 function placeFinalBet() {
   const bet = parseInt(document.getElementById('final-bet-input').value);
   if (isNaN(bet) || bet < 0) {
-    showNotification('Введите корректную ставку!', 'error');
+    showNotification('Введите ставку!', 'error');
     return;
   }
   socket.emit('final-bet', { bet });
 }
 
 socket.on('final-bet-accepted', (data) => {
-  showNotification(`Ставка принята: ${data.bet}`, 'success');
+  showNotification(`Ставка: ${data.bet}`, 'success');
   document.getElementById('final-bet-area').classList.add('hidden');
   document.getElementById('final-waiting-area').classList.remove('hidden');
   document.getElementById('final-waiting-area').innerHTML =
-    '<div style="font-size: 20px; color: var(--text-secondary);">Ожидание других игроков...</div>';
+    '<div style="font-size: 20px; color: var(--text-secondary);">Ожидание...</div>';
 });
 
 socket.on('final-question', (data) => {
   document.getElementById('final-bet-area').classList.add('hidden');
   document.getElementById('final-waiting-area').classList.add('hidden');
   document.getElementById('final-question-area').classList.remove('hidden');
-
   document.getElementById('final-q-text').textContent = data.text;
 
   let timeLeft = data.timeLimit;
@@ -569,38 +600,35 @@ socket.on('final-question', (data) => {
     timeLeft--;
     timerEl.textContent = timeLeft;
     if (timeLeft <= 10) timerEl.style.color = 'var(--danger)';
-    if (timeLeft <= 0) {
-      clearInterval(finalTimerInterval);
-      submitFinalAnswer();
-    }
+    if (timeLeft <= 0) { clearInterval(finalTimerInterval); submitFinalAnswer(); }
   }, 1000);
 });
 
 function submitFinalAnswer() {
   if (finalTimerInterval) clearInterval(finalTimerInterval);
-
   const answer = document.getElementById('final-answer-input').value.trim();
   socket.emit('final-answer', { answer });
 
   document.getElementById('final-question-area').classList.add('hidden');
   document.getElementById('final-waiting-area').classList.remove('hidden');
   document.getElementById('final-waiting-area').innerHTML =
-    '<div style="font-size: 20px; color: var(--text-secondary); animation: pulse 2s infinite;">Ведущий проверяет ответы...</div>';
+    '<div style="font-size: 20px; color: var(--text-secondary); animation: pulse 2s infinite;">Ведущий проверяет...</div>';
 }
 
 socket.on('final-waiting', (data) => {
   document.getElementById('final-question-area')?.classList.add('hidden');
-  document.getElementById('final-waiting-area')?.classList.remove('hidden');
-  if (document.getElementById('final-waiting-area')) {
-    document.getElementById('final-waiting-area').innerHTML =
-      `<div style="font-size: 20px; color: var(--text-secondary); animation: pulse 2s infinite;">${escapeHtml(data.message)}</div>`;
-  }
+  const wa = document.getElementById('final-waiting-area');
+  if (wa) { wa.classList.remove('hidden'); wa.innerHTML = `<div style="font-size: 20px; color: var(--text-secondary); animation: pulse 2s infinite;">${escapeHtml(data.message)}</div>`; }
 });
 
-// ===== РЕЗУЛЬТАТЫ =====
+// ===== GAME OVER =====
 socket.on('game-over', (data) => {
   if (finalTimerInterval) clearInterval(finalTimerInterval);
   clearAnswerTimer();
+
+  // Очищаем сессию
+  localStorage.removeItem(`session_${roomId}`);
+  localStorage.removeItem(`name_${roomId}`);
 
   hideAllScreens();
   const screen = document.getElementById('results-screen');
@@ -610,64 +638,26 @@ socket.on('game-over', (data) => {
 
   if (data.players.length >= 1) {
     html += '<div class="podium">';
-
     if (data.players[1]) {
-      html += `
-        <div class="podium-place second">
-          <div class="podium-name">${escapeHtml(data.players[1].name)}</div>
-          <div class="podium-score">${data.players[1].score}</div>
-          <div class="podium-bar second"><div class="podium-position">2</div></div>
-        </div>
-      `;
+      html += `<div class="podium-place second"><div class="podium-name">${escapeHtml(data.players[1].name)}</div><div class="podium-score">${data.players[1].score}</div><div class="podium-bar second"><div class="podium-position">2</div></div></div>`;
     }
-
     const isWinner = data.players[0].id === myId;
-    html += `
-      <div class="podium-place first">
-        <div class="podium-name">${isWinner ? '👑 ' : ''}${escapeHtml(data.players[0].name)}${isWinner ? ' (ВЫ!)' : ''}</div>
-        <div class="podium-score">${data.players[0].score}</div>
-        <div class="podium-bar first"><div class="podium-position">1</div></div>
-      </div>
-    `;
-
+    html += `<div class="podium-place first"><div class="podium-name">${isWinner ? '👑 ' : ''}${escapeHtml(data.players[0].name)}${isWinner ? ' (ВЫ!)' : ''}</div><div class="podium-score">${data.players[0].score}</div><div class="podium-bar first"><div class="podium-position">1</div></div></div>`;
     if (data.players[2]) {
-      html += `
-        <div class="podium-place third">
-          <div class="podium-name">${escapeHtml(data.players[2].name)}</div>
-          <div class="podium-score">${data.players[2].score}</div>
-          <div class="podium-bar third"><div class="podium-position">3</div></div>
-        </div>
-      `;
+      html += `<div class="podium-place third"><div class="podium-name">${escapeHtml(data.players[2].name)}</div><div class="podium-score">${data.players[2].score}</div><div class="podium-bar third"><div class="podium-position">3</div></div></div>`;
     }
-
     html += '</div>';
   }
 
   html += '<div style="max-width: 500px; width: 100%;">';
   data.players.forEach((p, i) => {
     const isMe = p.id === myId;
-    html += `
-      <div style="display: flex; align-items: center; gap: 15px; padding: 12px; background: rgba(255,255,255,${isMe ? '0.1' : '0.05'}); border-radius: 10px; margin: 5px 0; ${isMe ? 'border: 2px solid var(--secondary);' : ''}">
-        <div style="font-family: 'Russo One'; font-size: 20px; color: var(--text-secondary); width: 30px;">${i + 1}</div>
-        <div class="player-bar-avatar" style="background: ${p.avatarColor}">${p.name[0].toUpperCase()}</div>
-        <div style="flex: 1; font-weight: 700;">${escapeHtml(p.name)} ${isMe ? '(Вы)' : ''}</div>
-        <div class="player-bar-score ${p.score < 0 ? 'negative' : ''}">${p.score}</div>
-      </div>
-    `;
+    html += `<div style="display:flex;align-items:center;gap:15px;padding:12px;background:rgba(255,255,255,${isMe?'0.1':'0.05'});border-radius:10px;margin:5px 0;${isMe?'border:2px solid var(--secondary);':''}"><div style="font-family:'Russo One';font-size:20px;color:var(--text-secondary);width:30px;">${i+1}</div><div class="player-bar-avatar" style="background:${p.avatarColor}">${p.name[0].toUpperCase()}</div><div style="flex:1;font-weight:700;">${escapeHtml(p.name)} ${isMe?'(Вы)':''}</div><div class="player-bar-score ${p.score<0?'negative':''}">${p.score}</div></div>`;
   });
   html += '</div>';
-
-  html += `
-    <button class="btn btn-primary btn-large" onclick="window.location.href='/'" style="margin-top: 30px;">
-      🏠 На главную
-    </button>
-  `;
+  html += `<button class="btn btn-primary btn-large" onclick="window.location.href='/'" style="margin-top:30px;">🏠 На главную</button>`;
 
   screen.innerHTML = html;
-
-  if (data.players[0]?.id === myId && navigator.vibrate) {
-    navigator.vibrate([200, 100, 200, 100, 200]);
-  }
 });
 
 // ===== ПАНЕЛЬ ИГРОКОВ =====
@@ -677,16 +667,17 @@ function renderPlayersBar() {
   bar.innerHTML = '';
 
   players.forEach(p => {
+    const isMe = p.id === myId;
     const item = document.createElement('div');
     item.className = 'player-bar-item';
     item.id = `player-bar-${p.id}`;
     if (p.id === choosingPlayer) item.classList.add('choosing');
-    if (p.id === myId) item.style.borderColor = 'rgba(255, 214, 0, 0.5)';
+    if (isMe) item.style.borderColor = 'rgba(255, 214, 0, 0.5)';
 
     item.innerHTML = `
       <div class="player-bar-avatar" style="background: ${p.avatarColor}">${p.name[0].toUpperCase()}</div>
       <div class="player-bar-info">
-        <div class="player-bar-name">${escapeHtml(p.name)}${p.id === myId ? ' ⭐' : ''}</div>
+        <div class="player-bar-name">${escapeHtml(p.name)}${isMe ? ' ⭐' : ''}${!p.connected ? ' 🔴' : ''}</div>
         <div class="player-bar-score ${p.score < 0 ? 'negative' : ''}">${p.score}</div>
       </div>
     `;
@@ -714,10 +705,7 @@ function toggleChat() {
 function sendChat() {
   const input = document.getElementById('chat-input');
   const msg = input.value.trim();
-  if (msg) {
-    socket.emit('chat-message', { message: msg });
-    input.value = '';
-  }
+  if (msg) { socket.emit('chat-message', { message: msg }); input.value = ''; }
 }
 
 document.getElementById('chat-input')?.addEventListener('keydown', (e) => {
@@ -751,7 +739,6 @@ function escapeHtml(text) {
 function showNotification(message, type = 'info', duration = 3000) {
   const existing = document.querySelector('.notification');
   if (existing) existing.remove();
-
   const notif = document.createElement('div');
   notif.className = `notification ${type}`;
   notif.textContent = message;
@@ -759,26 +746,6 @@ function showNotification(message, type = 'info', duration = 3000) {
   setTimeout(() => notif.remove(), duration);
 }
 
-// ===== ОШИБКИ =====
-socket.on('error-msg', (data) => {
-  showNotification(data.message, 'error');
-});
-
-socket.on('host-disconnected', () => {
-  showNotification('⚠️ Ведущий отключился!', 'error', 10000);
-});
-
-socket.on('player-disconnected', (data) => {
-  players = data.players;
-  renderPlayersBar();
-});
-
-socket.on('disconnect', () => {
-  showNotification('⚠️ Потеряно соединение с сервером...', 'error', 10000);
-});
-
-socket.on('connect', () => {
-  if (roomId && myName) {
-    socket.emit('join-room', { roomId, name: myName });
-  }
-});
+socket.on('error-msg', (data) => showNotification(data.message, 'error'));
+socket.on('host-disconnected', () => showNotification('⚠️ Ведущий отключился! Ожидание...', 'error', 10000));
+socket.on('player-disconnected', (data) => { players = data.players; renderPlayersBar(); });
