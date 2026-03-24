@@ -441,18 +441,39 @@ socket.on('cat-in-bag', (data) => {
 
   const selectArea = document.getElementById('cat-select-area');
 
+  console.log('Кот в мешке. myId:', myId, 'choosingPlayer:', data.choosingPlayer);
+
   if (data.choosingPlayer === myId) {
+    // Я выбираю, кому отдать
     let html = '<div style="margin-top: 20px; font-size: 18px;">Выберите игрока:</div>';
     html += '<div class="player-select-grid">';
+
+    let count = 0;
     data.players.forEach(p => {
-      if (p.id === myId) return;
+      const playerId = p.id || p.sessionId;
+      if (playerId === myId) return; // нельзя себе
       html += `
-        <div class="player-select-btn" onclick="selectCatPlayer('${p.id}')">
+        <div class="player-select-btn" onclick="selectCatPlayer('${playerId}')">
           <div class="name">${escapeHtml(p.name)}</div>
           <div class="score">${p.score}</div>
         </div>
       `;
+      count++;
     });
+
+    // Если один игрок — можно себе
+    if (count === 0) {
+      data.players.forEach(p => {
+        const playerId = p.id || p.sessionId;
+        html += `
+          <div class="player-select-btn" onclick="selectCatPlayer('${playerId}')">
+            <div class="name">${escapeHtml(p.name)}</div>
+            <div class="score">${p.score}</div>
+          </div>
+        `;
+      });
+    }
+
     html += '</div>';
     selectArea.innerHTML = html;
   } else {
@@ -463,10 +484,6 @@ socket.on('cat-in-bag', (data) => {
     `;
   }
 });
-
-function selectCatPlayer(playerId) {
-  socket.emit('cat-select-player', { playerId });
-}
 
 // ===== АУКЦИОН =====
 socket.on('auction-start', (data) => {
