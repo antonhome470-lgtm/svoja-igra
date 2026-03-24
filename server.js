@@ -560,7 +560,7 @@ io.on('connection', (socket) => {
     const categoryName =
       room.rounds[room.currentRound].categories[catIndex].name;
 
-    if (question.type === 'cat') {
+       if (question.type === 'cat') {
       room.state = 'cat-select';
       io.to(socket.roomId).emit('cat-in-bag', {
         catTheme: question.catTheme,
