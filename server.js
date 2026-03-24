@@ -461,7 +461,23 @@ io.on('connection', (socket) => {
       }
     }, 20000);
   });
+  // --- Текстовый ответ игрока ---
+  socket.on('text-answer', (data) => {
+    const room = rooms.get(socket.roomId);
+    if (!room) return;
+    if (room.currentAnsweringPlayer !== socket.id) return;
 
+    const answer = (data.answer || '').substring(0, 200);
+    const player = room.players.get(socket.id);
+
+    // Отправляем ведущему ответ игрока для оценки
+    io.to(room.hostId).emit('player-text-answer', {
+      playerId: socket.id,
+      playerName: player.name,
+      answer: answer
+    });
+  });
+  
   // --- Оценка ответа ---
   socket.on('judge-answer', (data) => {
     const room = rooms.get(socket.roomId);
