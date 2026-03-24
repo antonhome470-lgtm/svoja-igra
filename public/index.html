@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Своя Игра — Онлайн</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⭐</text></svg>">
+</head>
+<body>
+  <div class="stars"></div>
+
+  <!-- Главное меню -->
+  <div id="main-menu" class="main-menu">
+    <div class="main-title">⭐ СВОЯ ИГРА</div>
+    <div class="main-subtitle">Классическая телевикторина — теперь онлайн!</div>
+
+    <div class="menu-container">
+      <div class="menu-card" onclick="showModal('host')">
+        <div class="icon">🎤</div>
+        <h2>Ведущий</h2>
+        <p>Создайте комнату, управляйте игрой и оценивайте ответы игроков</p>
+      </div>
+
+      <div class="menu-card" onclick="showModal('player')">
+        <div class="icon">🎮</div>
+        <h2>Игрок</h2>
+        <p>Присоединитесь к комнате по коду и соревнуйтесь с другими игроками</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модальное окно — Ведущий -->
+  <div id="modal-host" class="modal-overlay hidden" onclick="closeModal(event, 'host')">
+    <div class="modal" onclick="event.stopPropagation()">
+      <h2>🎤 Создать игру</h2>
+      <div class="form-group">
+        <label>Ваше имя</label>
+        <input type="text" id="host-name" placeholder="Имя ведущего" maxlength="20" autocomplete="off">
+      </div>
+      <button class="btn btn-primary btn-full" onclick="createRoom()">
+        Создать комнату
+      </button>
+      <br><br>
+      <button class="btn btn-secondary btn-full" onclick="hideModal('host')">
+        Отмена
+      </button>
+    </div>
+  </div>
+
+  <!-- Модальное окно — Игрок -->
+  <div id="modal-player" class="modal-overlay hidden" onclick="closeModal(event, 'player')">
+    <div class="modal" onclick="event.stopPropagation()">
+      <h2>🎮 Присоединиться</h2>
+      <div class="form-group">
+        <label>Ваше имя</label>
+        <input type="text" id="player-name" placeholder="Ваше имя" maxlength="20" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label>Код комнаты</label>
+        <input type="text" id="room-code-input" placeholder="ABCDEF" maxlength="6"
+               style="text-transform: uppercase; letter-spacing: 5px; text-align: center; font-size: 24px; font-family: 'Russo One', sans-serif;"
+               autocomplete="off">
+      </div>
+      <button class="btn btn-primary btn-full" onclick="joinRoom()">
+        Присоединиться
+      </button>
+      <br><br>
+      <button class="btn btn-secondary btn-full" onclick="hideModal('player')">
+        Отмена
+      </button>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/main.js"></script>
+</body>
+</html>
