@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Своя Игра — Ведущий</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="stars"></div>
+
+  <!-- Шапка -->
+  <div class="header">
+    <div class="logo">
+      <span class="star">⭐</span>
+      СВОЯ ИГРА
+    </div>
+    <div class="room-info">
+      <div class="room-code" id="room-code" onclick="copyRoomCode()" title="Нажмите, чтобы скопировать">
+        ---
+      </div>
+      <span style="color: var(--text-secondary); font-size: 12px;">🎤 Ведущий</span>
+    </div>
+  </div>
+
+  <!-- Контейнер -->
+  <div id="app">
+    <!-- Лобби -->
+    <div id="lobby" class="lobby-container">
+      <div class="lobby-title">Ожидание игроков</div>
+      <div class="lobby-room-code" id="lobby-room-code" onclick="copyRoomCode()" title="Скопировать код">
+        ---
+      </div>
+      <div class="lobby-hint">Нажмите на код, чтобы скопировать. Поделитесь им с игроками!</div>
+
+      <div class="players-grid" id="lobby-players"></div>
+
+      <div class="waiting-text" id="waiting-text">Ожидание игроков...</div>
+
+      <button class="btn btn-primary btn-large" id="start-btn" onclick="startGame()" disabled>
+        🚀 Начать игру
+      </button>
+    </div>
+
+    <!-- Игровая доска -->
+    <div id="game-board-screen" class="hidden">
+      <div class="game-container">
+        <div class="game-board">
+          <div class="round-title" id="round-title">Первый раунд</div>
+          <div class="choosing-info" id="choosing-info"></div>
+          <table class="board-table" id="board-table"></table>
+        </div>
+
+        <!-- Панель ведущего -->
+        <div class="host-panel" id="host-panel">
+          <button class="btn btn-secondary" onclick="skipToNextRound()" id="next-round-btn" style="display:none">
+            ⏭️ Следующий раунд
+          </button>
+        </div>
+
+        <div class="players-bar" id="players-bar"></div>
+      </div>
+    </div>
+
+    <!-- Вопрос -->
+    <div id="question-screen" class="question-overlay hidden">
+      <div class="question-category" id="q-category"></div>
+      <div class="question-value" id="q-value"></div>
+      <div class="question-text" id="q-text"></div>
+
+      <div id="q-answer-area" class="hidden">
+        <div class="question-answer" id="q-answer"></div>
+      </div>
+
+      <div id="answering-info" class="hidden" style="margin-top: 20px;">
+        <div style="font-size: 20px; color: var(--secondary); margin-bottom: 10px;">
+          Отвечает: <strong id="answering-player-name"></strong>
+        </div>
+      </div>
+
+      <!-- Панель ведущего при вопросе -->
+      <div class="host-panel" id="host-question-panel" style="position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); max-width: 800px; width: 90%;">
+        <div class="host-answer-display">
+          <div class="host-answer-label">Правильный ответ:</div>
+          <div class="host-answer-text" id="host-correct-answer"></div>
+        </div>
+
+        <div id="judge-buttons" class="hidden" style="display: flex; gap: 10px;">
+          <button class="btn btn-success" onclick="judgeAnswer(true)">✅ Верно</button>
+          <button class="btn btn-danger" onclick="judgeAnswer(false)">❌ Неверно</button>
+        </div>
+
+        <button class="btn btn-secondary" onclick="skipQuestion()" id="skip-btn">
+          ⏩ Пропустить
+        </button>
+      </div>
+    </div>
+
+    <!-- Кот в мешке -->
+    <div id="cat-screen" class="special-overlay hidden">
+      <div class="cat-bag-icon">🐱</div>
+      <div class="special-title">Кот в мешке!</div>
+      <div class="special-subtitle" id="cat-theme"></div>
+      <div class="special-subtitle" id="cat-value"></div>
+      <div style="margin-top: 20px; font-size: 18px;">Выберите игрока, который будет отвечать:</div>
+      <div class="player-select-grid" id="cat-players"></div>
+    </div>
+
+    <!-- Аукцион -->
+    <div id="auction-screen" class="special-overlay hidden">
+      <div class="special-title">💰 Вопрос-аукцион!</div>
+      <div class="special-subtitle" id="auction-info"></div>
+      <div id="auction-bets-info" style="margin: 20px 0; font-size: 18px;"></div>
+      <button class="btn btn-primary" onclick="finishAuction()" id="finish-auction-btn">
+        Завершить аукцион
+      </button>
+    </div>
+
+    <!-- Конец раунда -->
+    <div id="round-end-screen" class="special-overlay hidden">
+      <div class="special-title">Раунд завершён!</div>
+      <div class="players-grid" id="round-end-players" style="max-width: 600px; margin: 20px 0;"></div>
+      <button class="btn btn-primary btn-large" onclick="nextRound()">
+        ▶️ Следующий раунд
+      </button>
+    </div>
+
+    <!-- Финальный раунд -->
+    <div id="final-screen" class="final-container hidden">
+      <div class="special-title">🏆 Финальный раунд</div>
+      <div class="final-theme" id="final-theme"></div>
+      <div id="final-host-area"></div>
+    </div>
+
+    <!-- Результаты -->
+    <div id="results-screen" class="results-container hidden"></div>
+  </div>
+
+  <!-- Чат -->
+  <div class="chat-container" id="chat">
+    <div class="chat-header" onclick="toggleChat()">
+      <h3>💬 Чат</h3>
+      <button class="chat-toggle" id="chat-toggle-btn">−</button>
+    </div>
+    <div class="chat-messages" id="chat-messages"></div>
+    <div class="chat-input-area">
+      <input type="text" class="chat-input" id="chat-input" placeholder="Сообщение..." maxlength="200">
+      <button class="chat-send" onclick="sendChat()">→</button>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/host.js"></script>
+</body>
+</html>
