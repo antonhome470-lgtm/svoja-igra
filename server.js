@@ -128,6 +128,7 @@ class GameRoom {
     this.finalTheme = null;
     this.finalData = null;
     this.autoStartTimer = null;
+    this.adminSessionId = null;
     this.createdAt = Date.now();
   }
 
