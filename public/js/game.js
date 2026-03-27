@@ -173,27 +173,65 @@ socket.on('players-update', (data) => {
   players = data.players;
   renderLobbyPlayers();
   renderPlayersBar();
-
-  if (isAutoHost && gameState === 'lobby') {
-    let btn = document.getElementById('auto-start-btn');
-    if (!btn && players.length >= 1) {
-      const lobby = document.getElementById('lobby');
-      if (lobby) {
-        btn = document.createElement('button');
-        btn.id = 'auto-start-btn';
-        btn.className = 'btn btn-primary btn-large';
-        btn.textContent = '🚀 Начать игру сейчас';
-        btn.style.marginTop = '20px';
-        btn.onclick = () => socket.emit('auto-start-now');
-        lobby.appendChild(btn);
-      }
-    }
-  }
+  renderAutoStartButton();
 });
 
+socket.on('auto-waiting', (data) => {
+  renderAutoStartButton();
+});
+
+socket.on('auto-countdown', (data) => {
+  showNotification(`🤖 ${data.message}`, 'info', data.seconds * 1000);
+});
+
+function renderAutoStartButton() {
+  if (!isAutoHost || gameState !== 'lobby') return;
+
+  const lobby = document.getElementById('lobby');
+  if (!lobby) return;
+
+  // Удаляем старую кнопку если есть
+  const old = document.getElementById('auto-start-btn');
+  if (old) old.remove();
+
+  // Удаляем старый текст ожидания
+  const oldWait = document.getElementById('auto-waiting-text');
+  if (oldWait) oldWait.remove();
+
+  if (players.length >= 1) {
+    // Показываем информацию и кнопку
+    const wrapper = document.createElement('div');
+    wrapper.id = 'auto-waiting-text';
+    wrapper.style.cssText = 'text-align: center; margin-top: 20px;';
+    wrapper.innerHTML = `
+      <div style="color: var(--text-secondary); font-size: 16px; margin-bottom: 15px;">
+        🤖 Бот-ведущий | Игроков: <strong style="color: var(--secondary);">${players.length}</strong>/6
+      </div>
+      <div style="color: var(--text-secondary); font-size: 14px; margin-bottom: 15px;">
+        Поделитесь кодом комнаты с друзьями.<br>Когда все подключатся — нажмите кнопку.
+      </div>
+    `;
+    lobby.appendChild(wrapper);
+
+    const btn = document.createElement('button');
+    btn.id = 'auto-start-btn';
+    btn.className = 'btn btn-primary btn-large';
+    btn.innerHTML = '🚀 Начать игру';
+    btn.style.marginTop = '10px';
+    btn.onclick = () => {
+      btn.disabled = true;
+      btn.textContent = '⏳ Запуск...';
+      socket.emit('auto-start-now');
+    };
+    lobby.appendChild(btn);
+  }
+}
+
 function renderLobbyPlayers() {
-  const c = document.getElementById('lobby-players'); if (!c) return;
+  const c = document.getElementById('lobby-players');
+  if (!c) return;
   c.innerHTML = '';
+
   players.forEach(p => {
     const isMe = p.id === myId;
     const card = document.createElement('div');
@@ -207,6 +245,16 @@ function renderLobbyPlayers() {
     `;
     c.appendChild(card);
   });
+
+  // Обновляем текст ожидания в обычном лобби
+  const waitText = document.querySelector('.waiting-text');
+  if (waitText && !isAutoHost) {
+    waitText.textContent = players.length > 0
+      ? `Игроков: ${players.length}/6 — ожидание ведущего...`
+      : 'Ожидание игроков...';
+  } else if (waitText && isAutoHost) {
+    waitText.textContent = '';
+  }
 }
 
 // ===== ИГРА =====
