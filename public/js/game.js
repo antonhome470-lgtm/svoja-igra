@@ -15,6 +15,7 @@ let gameState = 'lobby';
 let finalTimerInterval = null;
 let answerTimerInterval = null;
 let sessionId = null;
+let isAutoHost = false;
 
 // ===== ИНИЦИАЛИЗАЦИЯ =====
 (function init() {
@@ -48,23 +49,26 @@ socket.on('joined-room', (data) => {
   sessionId = data.sessionId;
   myId = data.sessionId;
   players = data.players;
+  isAutoHost = data.autoHost || false;
 
-  // Сохраняем сессию
   localStorage.setItem(`session_${roomId}`, sessionId);
   localStorage.setItem(`name_${roomId}`, myName);
 
   renderLobbyPlayers();
   showNotification('Вы присоединились к игре!', 'success');
-});
 
+  if (isAutoHost) {
+    showNotification('🤖 Бот-ведущий. Игра начнётся автоматически!', 'info', 5000);
+  }
+});
 // ===== ПЕРЕПОДКЛЮЧЕНИЕ =====
 socket.on('reconnected', (data) => {
   sessionId = data.sessionId;
   myId = data.sessionId;
   myName = data.playerName;
+  isAutoHost = data.autoHost || false;
 
   localStorage.setItem(`session_${roomId}`, sessionId);
-
   document.getElementById('my-name').textContent = myName;
   showNotification('🔄 Вы вернулись в игру!', 'success', 3000);
 });
@@ -131,6 +135,7 @@ socket.on('game-started', (data) => {
   players = data.players;
   choosingPlayer = data.choosingPlayer;
   amChoosing = (choosingPlayer === myId);
+  isAutoHost = data.autoHost || isAutoHost;
 
   hideAllScreens();
   document.getElementById('game-board-screen').classList.remove('hidden');
@@ -762,6 +767,59 @@ function showNotification(message, type = 'info', duration = 3000) {
   document.body.appendChild(notif);
   setTimeout(() => notif.remove(), duration);
 }
+
+// ===== АВТО-РЕЖИМ =====
+socket.on('auto-countdown', (data) => {
+  showNotification(`🤖 ${data.message}`, 'info', data.seconds * 1000);
+});
+
+socket.on('auto-start-now-btn', () => {
+  // Кнопка для раннего старта — по желанию
+});
+
+socket.on('auto-cat-in-bag', (data) => {
+  showNotification(`🐱 Кот в мешке! Тема: ${data.catTheme}. Отвечает: ${data.targetPlayerName}`, 'info', 3000);
+});
+
+socket.on('auto-auction', (data) => {
+  showNotification(`💰 Аукцион! ${data.category} — ${data.value}`, 'info', 2000);
+});
+
+socket.on('auto-wrong-detail', (data) => {
+  showNotification(`❌ ${data.playerName} ответил: "${data.playerAnswer}". Правильно: "${data.correctAnswer}"`, 'error', 5000);
+});
+
+socket.on('auto-final-results', (data) => {
+  let msg = `Правильный ответ: ${data.correctAnswer}\n`;
+  data.results.forEach(r => {
+    msg += `${r.correct ? '✅' : '❌'} ${r.playerName}: "${r.answer}" (ставка: ${r.bet})\n`;
+  });
+  showNotification(msg, 'info', 8000);
+});
+
+// Кнопка "Начать сейчас" для авто-режима в лобби
+socket.on('players-update', (data) => {
+  players = data.players;
+  renderLobbyPlayers();
+  renderPlayersBar();
+
+  // Добавляем кнопку старта в лобби для авто-режима
+  if (isAutoHost && gameState === 'lobby') {
+    let startBtn = document.getElementById('auto-start-btn');
+    if (!startBtn && players.length >= 1) {
+      const lobby = document.getElementById('lobby');
+      if (lobby) {
+        startBtn = document.createElement('button');
+        startBtn.id = 'auto-start-btn';
+        startBtn.className = 'btn btn-primary btn-large';
+        startBtn.textContent = '🚀 Начать игру сейчас';
+        startBtn.style.marginTop = '20px';
+        startBtn.onclick = () => socket.emit('auto-start-now');
+        lobby.appendChild(startBtn);
+      }
+    }
+  }
+});
 
 socket.on('error-msg', (data) => showNotification(data.message, 'error'));
 socket.on('host-disconnected', () => showNotification('⚠️ Ведущий отключился! Ожидание...', 'error', 10000));
