@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Своя Игра — Редактор вопросов</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .editor-container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 20px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .editor-header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    .editor-header h1 {
+      font-family: 'Russo One', sans-serif;
+      color: var(--secondary);
+      font-size: 32px;
+      margin-bottom: 10px;
+    }
+
+    .round-block {
+      background: var(--bg-card);
+      border: 2px solid rgba(255, 214, 0, 0.2);
+      border-radius: 15px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    .round-title-edit {
+      font-family: 'Russo One', sans-serif;
+      color: var(--secondary);
+      font-size: 22px;
+      margin-bottom: 15px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .category-block {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 15px;
+      margin-bottom: 12px;
+    }
+
+    .category-name-input {
+      width: 100%;
+      padding: 10px 15px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 2px solid rgba(255, 214, 0, 0.3);
+      border-radius: 8px;
+      color: var(--secondary);
+      font-size: 16px;
+      font-weight: 700;
+      outline: none;
+      margin-bottom: 10px;
+    }
+
+    .category-name-input:focus {
+      border-color: var(--secondary);
+    }
+
+    .question-row {
+      display: grid;
+      grid-template-columns: 60px 1fr 1fr 100px;
+      gap: 8px;
+      margin-bottom: 6px;
+      align-items: center;
+    }
+
+    .question-row.header {
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-weight: 700;
+    }
+
+    .q-input {
+      width: 100%;
+      padding: 8px 10px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 6px;
+      color: var(--text-primary);
+      font-size: 13px;
+      outline: none;
+    }
+
+    .q-input:focus {
+      border-color: var(--secondary);
+    }
+
+    .q-select {
+      width: 100%;
+      padding: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 6px;
+      color: var(--text-primary);
+      font-size: 12px;
+      outline: none;
+    }
+
+    .q-value {
+      text-align: center;
+      font-family: 'Russo One', sans-serif;
+      color: var(--secondary);
+      font-size: 16px;
+    }
+
+    .final-block {
+      background: var(--bg-card);
+      border: 2px solid rgba(255, 214, 0, 0.4);
+      border-radius: 15px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    .final-block h2 {
+      font-family: 'Russo One', sans-serif;
+      color: var(--secondary);
+      margin-bottom: 15px;
+    }
+
+    .final-block .form-group {
+      margin-bottom: 12px;
+    }
+
+    .final-block input, .final-block textarea {
+      width: 100%;
+      padding: 10px 15px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-size: 14px;
+      outline: none;
+    }
+
+    .final-block textarea {
+      min-height: 60px;
+      resize: vertical;
+    }
+
+    .actions-bar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin: 20px 0;
+      position: sticky;
+      top: 0;
+      background: var(--bg-dark);
+      padding: 15px;
+      z-index: 10;
+      border-bottom: 2px solid rgba(255, 214, 0, 0.2);
+      border-radius: 0 0 15px 15px;
+    }
+
+    .pack-select {
+      background: var(--bg-card);
+      border: 2px solid rgba(255, 214, 0, 0.2);
+      border-radius: 15px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    .pack-select h2 {
+      font-family: 'Russo One', sans-serif;
+      color: var(--secondary);
+      margin-bottom: 15px;
+      text-align: center;
+    }
+
+    .pack-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 10px;
+    }
+
+    .pack-card {
+      background: rgba(255, 255, 255, 0.05);
+      border: 2px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 15px;
+      cursor: pointer;
+      transition: all 0.3s;
+      text-align: center;
+    }
+
+    .pack-card:hover {
+      border-color: var(--secondary);
+      transform: translateY(-2px);
+    }
+
+    .pack-card.active {
+      border-color: var(--secondary);
+      background: rgba(255, 214, 0, 0.1);
+    }
+
+    .pack-card .pack-name {
+      font-weight: 700;
+      font-size: 16px;
+      margin-bottom: 5px;
+    }
+
+    .pack-card .pack-desc {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .import-area {
+      border: 2px dashed rgba(255, 214, 0, 0.3);
+      border-radius: 12px;
+      padding: 30px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s;
+      margin: 15px 0;
+    }
+
+    .import-area:hover {
+      border-color: var(--secondary);
+      background: rgba(255, 214, 0, 0.05);
+    }
+
+    .import-area.dragover {
+      border-color: var(--success);
+      background: rgba(0, 230, 118, 0.1);
+    }
+
+    @media (max-width: 768px) {
+      .question-row {
+        grid-template-columns: 40px 1fr;
+        gap: 5px;
+      }
+      .question-row.header {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="stars"></div>
+
+  <div class="header">
+    <div class="logo">
+      <span class="star">⭐</span>
+      <a href="/" style="color: var(--secondary); text-decoration: none;">СВОЯ ИГРА</a>
+    </div>
+    <div>
+      <span style="color: var(--text-secondary);">Редактор вопросов</span>
+    </div>
+  </div>
+
+  <div class="actions-bar">
+    <button class="btn btn-primary" onclick="downloadPack()">💾 Скачать JSON</button>
+    <button class="btn btn-secondary" onclick="document.getElementById('file-input').click()">📂 Загрузить JSON</button>
+    <button class="btn btn-secondary" onclick="loadPack('default')">🔄 Стандартный набор</button>
+    <button class="btn btn-success" onclick="validateAndPlay()">🚀 Создать игру с этими вопросами</button>
+    <input type="file" id="file-input" accept=".json" style="display:none" onchange="importFile(event)">
+  </div>
+
+  <div class="editor-container">
+
+    <div class="editor-header">
+      <h1>📝 Редактор вопросов</h1>
+      <p style="color: var(--text-secondary);">Создайте свой набор вопросов или загрузите готовый</p>
+    </div>
+
+    <!-- Готовые наборы -->
+    <div class="pack-select">
+      <h2>📦 Готовые наборы</h2>
+      <div class="pack-grid" id="pack-grid"></div>
+
+      <div class="import-area" id="import-area"
+           onclick="document.getElementById('file-input').click()"
+           ondragover="event.preventDefault(); this.classList.add('dragover')"
+           ondragleave="this.classList.remove('dragover')"
+           ondrop="handleDrop(event)">
+        <div style="font-size: 40px; margin-bottom: 10px;">📄</div>
+        <div style="font-size: 16px; color: var(--secondary);">Перетащите JSON файл сюда</div>
+        <div style="font-size: 13px; color: var(--text-secondary); margin-top: 5px;">или нажмите для выбора</div>
+      </div>
+    </div>
+
+    <!-- Редактор раундов -->
+    <div id="editor-content"></div>
+
+  </div>
+
+  <script>
+    let currentPack = null;
+
+    // Готовые наборы
+    const builtinPacks = {
+      default: { name: '🎯 Стандартный', desc: 'История, Наука, Кино, География, Музыка, Спорт' },
+      cinema: { name: '🎬 Кино и сериалы', desc: 'Фильмы, актёры, режиссёры' },
+      science: { name: '🔬 Наука', desc: 'Физика, химия, биология, космос' },
+      history: { name: '📜 История', desc: 'Мировая история, даты, личности' },
+      it: { name: '💻 IT и технологии', desc: 'Программирование, гаджеты, интернет' },
+      music: { name: '🎵 Музыка', desc: 'Рок, поп, классика, инструменты' },
+      nature: { name: '🌍 Природа', desc: 'Животные, растения, география' }
+    };
+
+    // Инициализация
+    (async function init() {
+      renderPackGrid();
+      await loadPack('default');
+    })();
+
+    function renderPackGrid() {
+      const grid = document.getElementById('pack-grid');
+      grid.innerHTML = '';
+      for (const [key, pack] of Object.entries(builtinPacks)) {
+        const card = document.createElement('div');
+        card.className = 'pack-card';
+        card.id = `pack-${key}`;
+        card.innerHTML = `
+          <div class="pack-name">${pack.name}</div>
+          <div class="pack-desc">${pack.desc}</div>
+        `;
+        card.onclick = () => loadPack(key);
+        grid.appendChild(card);
+      }
+    }
+
+    async function loadPack(name) {
+      try {
+        const res = await fetch(`/api/questions/${name}`);
+        if (!res.ok) throw new Error('Набор не найден');
+        currentPack = await res.json();
+        renderEditor(currentPack);
+
+        // Подсветка
+        document.querySelectorAll('.pack-card').forEach(c => c.classList.remove('active'));
+        const card = document.getElementById(`pack-${name}`);
+        if (card) card.classList.add('active');
+      } catch (e) {
+        alert('Не удалось загрузить набор: ' + e.message);
+      }
+    }
+
+    function renderEditor(data) {
+      const container = document.getElementById('editor-content');
+      let html = '';
+
+      // Раунды
+      data.rounds.forEach((round, ri) => {
+        html += `<div class="round-block">`;
+        html += `<div class="round-title-edit">
+          <span>${round.name}</span>
+          <span style="font-size: 14px; color: var(--text-secondary);">
+            ${round.categories.length} категорий × ${round.categories[0]?.questions.length || 5} вопросов
+          </span>
+        </div>`;
+
+        round.categories.forEach((cat, ci) => {
+          html += `<div class="category-block">`;
+          html += `<input class="category-name-input" value="${escapeAttr(cat.name)}"
+                    onchange="updateCatName(${ri}, ${ci}, this.value)">`;
+
+          html += `<div class="question-row header">
+            <div>Цена</div><div>Вопрос</div><div>Ответ</div><div>Тип</div>
+          </div>`;
+
+          cat.questions.forEach((q, qi) => {
+            html += `<div class="question-row">
+              <div class="q-value">${q.value}</div>
+              <input class="q-input" value="${escapeAttr(q.text)}"
+                     placeholder="Вопрос..."
+                     onchange="updateQ(${ri},${ci},${qi},'text',this.value)">
+              <input class="q-input" value="${escapeAttr(q.answer)}"
+                     placeholder="Ответ..."
+                     onchange="updateQ(${ri},${ci},${qi},'answer',this.value)">
+              <select class="q-select"
+                      onchange="updateQ(${ri},${ci},${qi},'type',this.value)">
+                <option value="normal" ${q.type==='normal'?'selected':''}>Обычный</option>
+                <option value="cat" ${q.type==='cat'?'selected':''}>🐱 Кот</option>
+                <option value="auction" ${q.type==='auction'?'selected':''}>💰 Аукцион</option>
+              </select>
+            </div>`;
+          });
+
+          html += `</div>`;
+        });
+
+        html += `</div>`;
+      });
+
+      // Финальный раунд
+      html += `<div class="final-block">
+        <h2>🏆 Финальный раунд</h2>
+        <div class="form-group">
+          <label style="color: var(--text-secondary);">Тема</label>
+          <input value="${escapeAttr(data.finalRound.theme)}"
+                 onchange="currentPack.finalRound.theme=this.value">
+        </div>
+        <div class="form-group">
+          <label style="color: var(--text-secondary);">Вопрос</label>
+          <textarea onchange="currentPack.finalRound.text=this.value">${escapeAttr(data.finalRound.text)}</textarea>
+        </div>
+        <div class="form-group">
+          <label style="color: var(--text-secondary);">Ответ</label>
+          <input value="${escapeAttr(data.finalRound.answer)}"
+                 onchange="currentPack.finalRound.answer=this.value">
+        </div>
+      </div>`;
+
+      container.innerHTML = html;
+    }
+
+    function updateCatName(ri, ci, value) {
+      currentPack.rounds[ri].categories[ci].name = value;
+    }
+
+    function updateQ(ri, ci, qi, field, value) {
+      currentPack.rounds[ri].categories[ci].questions[qi][field] = value;
+    }
+
+    function downloadPack() {
+      if (!currentPack) return;
+      const blob = new Blob([JSON.stringify(currentPack, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'svoya-igra-questions.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function importFile(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      readJsonFile(file);
+    }
+
+    function handleDrop(event) {
+      event.preventDefault();
+      event.target.classList.remove('dragover');
+      const file = event.dataTransfer.files[0];
+      if (file) readJsonFile(file);
+    }
+
+    function readJsonFile(file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = JSON.parse(e.target.result);
+          if (!data.rounds || !data.finalRound) {
+            throw new Error('Неверный формат файла');
+          }
+          currentPack = data;
+          renderEditor(data);
+          document.querySelectorAll('.pack-card').forEach(c => c.classList.remove('active'));
+          alert('✅ Вопросы загружены!');
+        } catch (err) {
+          alert('❌ Ошибка: ' + err.message);
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function validateAndPlay() {
+      if (!currentPack) {
+        alert('Сначала загрузите или создайте набор вопросов');
+        return;
+      }
+
+      // Сохраняем в sessionStorage
+      sessionStorage.setItem('customQuestions', JSON.stringify(currentPack));
+      sessionStorage.setItem('useCustomQuestions', 'true');
+
+      // Переходим на главную
+      window.location.href = '/?custom=1';
+    }
+
+    function escapeAttr(str) {
+      if (!str) return '';
+      return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+  </script>
+</body>
+</html>
