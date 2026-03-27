@@ -253,6 +253,16 @@ function renderLobbyPlayers() {
   }
 }
 
+  const waitText = document.querySelector('.waiting-text');
+  if (waitText && !isAutoHost) {
+    waitText.textContent = players.length > 0
+      ? `Игроков: ${players.length}/6 — ожидание ведущего...`
+      : 'Ожидание игроков...';
+  } else if (waitText && isAutoHost) {
+    waitText.textContent = '';
+  }
+}
+
 // ===== ИГРА =====
 socket.on('game-started', (data) => {
   gameState = 'playing'; players = data.players;
