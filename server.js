@@ -31,9 +31,7 @@ function checkAnswer(correct, given) {
   if (!given || !correct) return false;
 
   const normalize = (s) => {
-    return s
-      .toLowerCase()
-      .trim()
+    return s.toLowerCase().trim()
       .replace(/ё/g, 'е')
       .replace(/[«»""''„‟\-–—.,:;!?()[\]{}/\\'"]/g, '')
       .replace(/\s+/g, ' ')
@@ -43,23 +41,16 @@ function checkAnswer(correct, given) {
   const c = normalize(correct);
   const g = normalize(given);
 
-  // Точное совпадение
   if (c === g) return true;
-
-  // Один содержит другой
   if (c.includes(g) && g.length >= 3) return true;
   if (g.includes(c) && c.length >= 3) return true;
 
-  // Проверяем варианты ответа через скобки и слэш
-  // "Нил (или Амазонка)" → ["нил", "амазонка"]
-  // "Льюис Хэмилтон / Михаэль Шумахер" → ["льюис хэмилтон", "михаэль шумахер"]
   const variants = correct
     .split(/[\/|]/)
     .map(v => v.replace(/\(.*?\)/g, ' '))
     .map(normalize)
     .filter(v => v.length > 0);
 
-  // Также извлекаем текст из скобок как отдельные варианты
   const bracketMatches = correct.match(/\(([^)]+)\)/g);
   if (bracketMatches) {
     for (const bm of bracketMatches) {
@@ -74,7 +65,6 @@ function checkAnswer(correct, given) {
     if (variant.includes(g) && g.length >= 3) return true;
     if (g.includes(variant) && variant.length >= 3) return true;
 
-    // Расстояние Левенштейна для коротких ответов
     if (variant.length <= 15 && g.length <= 15) {
       const dist = levenshtein(variant, g);
       const maxLen = Math.max(variant.length, g.length);
@@ -82,7 +72,6 @@ function checkAnswer(correct, given) {
     }
   }
 
-  // Числа
   const cNums = c.match(/\d+/g);
   const gNums = g.match(/\d+/g);
   if (cNums && gNums && cNums.length === 1 && gNums.length === 1) {
@@ -100,9 +89,9 @@ function levenshtein(a, b) {
   for (let i = 1; i <= m; i++) {
     for (let j = 1; j <= n; j++) {
       dp[i][j] = Math.min(
-        dp[i-1][j] + 1,
-        dp[i][j-1] + 1,
-        dp[i-1][j-1] + (a[i-1] === b[j-1] ? 0 : 1)
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
       );
     }
   }
@@ -117,7 +106,7 @@ class GameRoom {
     this.hostName = hostName;
     this.hostSessionId = hostSessionId;
     this.customQuestions = customQuestions || null;
-    this.autoHost = autoHost || false; // бот-ведущий
+    this.autoHost = autoHost || false;
     this.players = new Map();
     this.playerSocketMap = new Map();
     this.state = 'lobby';
@@ -158,6 +147,7 @@ class GameRoom {
             answer: q.answer,
             type: q.type || 'normal',
             catTheme: q.catTheme || null,
+            options: q.options || null,
             answered: false
           });
         }
@@ -169,7 +159,7 @@ class GameRoom {
   }
 
   getRandomColor() {
-    const colors = ['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22','#e91e63'];
+    const colors = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#e91e63'];
     return colors[Math.floor(Math.random() * colors.length)];
   }
 
@@ -220,7 +210,9 @@ class GameRoom {
     return round.categories.every(cat => cat.questions.every(q => q.answered));
   }
 
-  getSocketId(sessionId) { return this.playerSocketMap.get(sessionId); }
+  getSocketId(sessionId) {
+    return this.playerSocketMap.get(sessionId);
+  }
 
   getHostSocketId() {
     return this.playerSocketMap.get(this.hostSessionId) || this.hostId;
@@ -235,7 +227,23 @@ function generateRoomCode() {
   return code;
 }
 
-function generateSessionId() { return uuidv4(); }
+function generateSessionId() {
+  return uuidv4();
+}
+
+// Формируем объект question-show
+function makeQuestionPayload(room, question, extra) {
+  const categoryName = room.rounds[room.currentRound].categories[question.catIndex].name;
+  return {
+    category: extra?.category || categoryName,
+    value: extra?.value || question.value,
+    text: question.text,
+    catIndex: question.catIndex,
+    qIndex: question.qIndex,
+    options: question.options || null,
+    ...(extra || {})
+  };
+}
 
 // ===== API =====
 app.get('/api/rooms', (req, res) => {
@@ -279,11 +287,9 @@ app.get('/api/packs', (req, res) => {
   res.json(packs);
 });
 
-// ===== АВТО-ВЕДУЩИЙ: логика =====
+// ===== АВТО-ВЕДУЩИЙ =====
 function autoJudgeAnswer(room, sessId, textAnswer) {
-  if (!room.currentQuestion || !room.currentAnsweringPlayer) return;
-  if (room.currentAnsweringPlayer !== sessId) return;
-
+  if (!room.currentQuestion || room.currentAnsweringPlayer !== sessId) return;
   clearTimeout(room.timer);
 
   const player = room.players.get(sessId);
@@ -305,7 +311,6 @@ function autoJudgeAnswer(room, sessId, textAnswer) {
     room.state = 'playing';
     room.currentQuestion = null;
     room.currentAnsweringPlayer = null;
-
     setTimeout(() => checkRoundEnd(room), 2500);
 
   } else {
@@ -317,7 +322,6 @@ function autoJudgeAnswer(room, sessId, textAnswer) {
       value: -value, players: room.getPlayersArray()
     });
 
-    // Показываем что ответил игрок и правильный ответ
     io.to(room.id).emit('auto-wrong-detail', {
       playerAnswer: textAnswer,
       correctAnswer: question.answer,
@@ -345,18 +349,6 @@ function autoJudgeAnswer(room, sessId, textAnswer) {
   }
 }
 
-function autoSelectRandomQuestion(room) {
-  const round = room.rounds[room.currentRound];
-  const available = [];
-  round.categories.forEach((cat, ci) => {
-    cat.questions.forEach((q, qi) => {
-      if (!q.answered) available.push({ ci, qi });
-    });
-  });
-  if (available.length === 0) return null;
-  return available[Math.floor(Math.random() * available.length)];
-}
-
 function autoStartQuestion(room, catIndex, qIndex) {
   const question = room.getQuestion(catIndex, qIndex);
   if (!question || question.answered) return;
@@ -368,7 +360,7 @@ function autoStartQuestion(room, catIndex, qIndex) {
 
   const categoryName = room.rounds[room.currentRound].categories[catIndex].name;
 
-  // Кот в мешке — в авто-режиме случайный игрок
+  // Кот в мешке — случайный игрок
   if (question.type === 'cat') {
     const others = Array.from(room.players.keys()).filter(id => id !== room.selectedByPlayer);
     const target = others.length > 0
@@ -376,6 +368,8 @@ function autoStartQuestion(room, catIndex, qIndex) {
       : room.selectedByPlayer;
 
     room.catInBagTarget = target;
+    room.state = 'question';
+    room.buzzerLocked = true;
 
     io.to(room.id).emit('auto-cat-in-bag', {
       catTheme: question.catTheme,
@@ -383,51 +377,45 @@ function autoStartQuestion(room, catIndex, qIndex) {
       targetPlayerName: room.players.get(target)?.name
     });
 
-    room.state = 'question';
-    room.buzzerLocked = true;
-
     setTimeout(() => {
-      io.to(room.id).emit('question-show', {
+      io.to(room.id).emit('question-show', makeQuestionPayload(room, room.currentQuestion, {
         category: question.catTheme || categoryName,
-        value: question.value, text: question.text,
-        catIndex, qIndex, catInBag: true,
+        catInBag: true,
         targetPlayer: target,
         targetPlayerName: room.players.get(target)?.name
-      });
+      }));
 
       setTimeout(() => {
         if (room.state === 'question') {
           room.currentAnsweringPlayer = target;
           room.state = 'answering';
           io.to(room.id).emit('player-answering', {
-            playerId: target, playerName: room.players.get(target)?.name
+            playerId: target,
+            playerName: room.players.get(target)?.name
           });
           room.timer = setTimeout(() => {
-            if (room.state === 'answering') {
-              autoJudgeAnswer(room, target, '');
-            }
+            if (room.state === 'answering') autoJudgeAnswer(room, target, '');
           }, 25000);
         }
       }, 3000);
     }, 2000);
-
     return;
   }
 
-  // Аукцион — в авто-режиме максимальная ставка = номинал
+  // Аукцион — упрощённый в авто-режиме
   if (question.type === 'auction') {
-    io.to(room.id).emit('auto-auction', {
-      category: categoryName, value: question.value
-    });
-
     room.state = 'question';
     room.buzzerLocked = true;
 
+    io.to(room.id).emit('auto-auction', {
+      category: categoryName,
+      value: question.value
+    });
+
     setTimeout(() => {
-      io.to(room.id).emit('question-show', {
-        category: categoryName, value: question.value,
-        text: question.text, catIndex, qIndex, auction: true
-      });
+      io.to(room.id).emit('question-show', makeQuestionPayload(room, room.currentQuestion, {
+        auction: true
+      }));
 
       setTimeout(() => {
         if (room.state === 'question') {
@@ -439,7 +427,6 @@ function autoStartQuestion(room, catIndex, qIndex) {
         }
       }, 3000);
     }, 2000);
-
     return;
   }
 
@@ -447,10 +434,7 @@ function autoStartQuestion(room, catIndex, qIndex) {
   room.state = 'question';
   room.buzzerLocked = true;
 
-  io.to(room.id).emit('question-show', {
-    category: categoryName, value: question.value,
-    text: question.text, catIndex, qIndex
-  });
+  io.to(room.id).emit('question-show', makeQuestionPayload(room, room.currentQuestion));
 
   setTimeout(() => {
     if (room.currentQuestion && room.state === 'question') {
@@ -464,6 +448,7 @@ function autoStartQuestion(room, catIndex, qIndex) {
 }
 
 function autoFinalJudge(room) {
+  clearTimeout(room.timer);
   const finalData = room.finalData || questionsData.finalRound;
   const results = [];
 
@@ -471,15 +456,10 @@ function autoFinalJudge(room) {
     const correct = checkAnswer(finalData.answer, answer);
     const player = room.players.get(sessId);
     const bet = room.finalBets.get(sessId) || 0;
-    if (player) {
-      player.score += correct ? bet : -bet;
-    }
+    if (player) player.score += correct ? bet : -bet;
     results.push({
-      playerId: sessId,
-      playerName: player?.name,
-      answer,
-      bet,
-      correct
+      playerId: sessId, playerName: player?.name,
+      answer, bet, correct
     });
   }
 
@@ -497,6 +477,23 @@ function autoFinalJudge(room) {
       winner: playersArr[0]
     });
   }, 5000);
+}
+
+function autoStartGame(room) {
+  room.state = 'playing';
+  room.currentRound = 0;
+  const sessionIds = Array.from(room.players.keys());
+  room.selectedByPlayer = sessionIds[Math.floor(Math.random() * sessionIds.length)];
+
+  io.to(room.id).emit('game-started', {
+    round: room.getRoundData(),
+    roundIndex: room.currentRound,
+    players: room.getPlayersArray(),
+    choosingPlayer: room.selectedByPlayer,
+    choosingPlayerName: room.players.get(room.selectedByPlayer)?.name,
+    autoHost: true
+  });
+  console.log(`Авто-игра началась в ${room.id}`);
 }
 
 // ===== SOCKET.IO =====
@@ -527,7 +524,7 @@ io.on('connection', (socket) => {
       roomId, hostName: data.name, sessionId,
       hasCustomQuestions: !!customQ
     });
-    console.log(`Комната ${roomId} создана: ${data.name}`);
+    console.log(`Комната ${roomId} создана: ${data.name}${customQ ? ' (свои вопросы)' : ''}`);
   });
 
   // --- Создание авто-комнаты ---
@@ -548,19 +545,18 @@ io.on('connection', (socket) => {
 
   // --- Переподключение ведущего ---
   socket.on('host-reconnect', (data) => {
-    const { sessionId, roomId } = data;
-    const room = rooms.get(roomId);
+    const room = rooms.get(data.roomId);
     if (!room) { socket.emit('reconnect-failed', { message: 'Комната не найдена' }); return; }
-    if (room.hostSessionId !== sessionId) { socket.emit('reconnect-failed', { message: 'Неверная сессия' }); return; }
+    if (room.hostSessionId !== data.sessionId) { socket.emit('reconnect-failed', { message: 'Неверная сессия' }); return; }
 
     room.hostId = socket.id;
-    room.playerSocketMap.set(sessionId, socket.id);
-    socket.join(roomId);
-    socket.roomId = roomId;
-    socket.sessionId = sessionId;
+    room.playerSocketMap.set(data.sessionId, socket.id);
+    socket.join(data.roomId);
+    socket.roomId = data.roomId;
+    socket.sessionId = data.sessionId;
     socket.isHost = true;
 
-    console.log(`Ведущий переподключился к ${roomId}`);
+    console.log(`Ведущий переподключился к ${data.roomId}`);
     sendFullStateToHost(socket, room);
   });
 
@@ -602,45 +598,39 @@ io.on('connection', (socket) => {
       autoHost: room.autoHost
     });
 
-    io.to(data.roomId).emit('players-update', {
-      players: room.getPlayersArray()
-    });
+    io.to(data.roomId).emit('players-update', { players: room.getPlayersArray() });
 
     console.log(`${data.name} → ${data.roomId}`);
 
-    // Авто-комната: автостарт через 5 сек если есть игроки
+    // Авто-старт
     if (room.autoHost && room.players.size >= 1) {
       clearTimeout(room.autoStartTimer);
       room.autoStartTimer = setTimeout(() => {
-        if (room.state === 'lobby' && room.players.size >= 1) {
-          autoStartGame(room);
-        }
-      }, 10000); // 10 секунд на подключение всех
+        if (room.state === 'lobby' && room.players.size >= 1) autoStartGame(room);
+      }, 10000);
 
       io.to(data.roomId).emit('auto-countdown', {
         seconds: 10,
-        message: 'Игра начнётся автоматически через 10 секунд...'
+        message: 'Игра начнётся через 10 секунд...'
       });
     }
   });
 
-  // --- Игрок запускает авто-игру вручную ---
+  // --- Ручной старт авто-игры ---
   socket.on('auto-start-now', () => {
     const room = getRoom();
-    if (!room || !room.autoHost || room.state !== 'lobby') return;
-    if (room.players.size < 1) return;
+    if (!room || !room.autoHost || room.state !== 'lobby' || room.players.size < 1) return;
     clearTimeout(room.autoStartTimer);
     autoStartGame(room);
   });
 
   // --- Переподключение игрока ---
   socket.on('player-reconnect', (data) => {
-    const { sessionId, roomId } = data;
-    const room = rooms.get(roomId);
+    const room = rooms.get(data.roomId);
     if (!room) { socket.emit('reconnect-failed', { message: 'Комната не найдена' }); return; }
-    const player = room.players.get(sessionId);
+    const player = room.players.get(data.sessionId);
     if (!player) { socket.emit('reconnect-failed', { message: 'Игрок не найден' }); return; }
-    handlePlayerReconnect(socket, room, sessionId, player);
+    handlePlayerReconnect(socket, room, data.sessionId, player);
   });
 
   function handlePlayerReconnect(socket, room, sessionId, player) {
@@ -661,97 +651,118 @@ io.on('connection', (socket) => {
     io.to(room.id).emit('player-reconnected', { playerName: player.name });
   }
 
+  // --- Полное состояние: ведущий ---
   function sendFullStateToHost(socket, room) {
     socket.emit('reconnected-host', {
       roomId: room.id, sessionId: room.hostSessionId,
       state: room.state, players: room.getPlayersArray()
     });
-    if (room.state === 'lobby') {
-      socket.emit('players-update', { players: room.getPlayersArray() });
-    } else if (room.state === 'playing') {
-      socket.emit('show-board', {
-        round: room.getRoundData(), roundIndex: room.currentRound,
-        players: room.getPlayersArray(), choosingPlayer: room.selectedByPlayer,
-        choosingPlayerName: room.players.get(room.selectedByPlayer)?.name
-      });
-    } else if (room.state === 'question' || room.state === 'answering') {
-      if (room.currentQuestion) {
-        const q = room.currentQuestion;
-        const catName = room.rounds[room.currentRound].categories[q.catIndex].name;
-        socket.emit('question-show', { category: catName, value: q.value, text: q.text, catIndex: q.catIndex, qIndex: q.qIndex });
-        socket.emit('host-answer', { answer: q.answer });
-        if (room.state === 'answering' && room.currentAnsweringPlayer) {
-          socket.emit('player-answering', { playerId: room.currentAnsweringPlayer, playerName: room.players.get(room.currentAnsweringPlayer)?.name });
-        }
-      }
-    } else if (room.state === 'finished') {
-      const pa = room.getPlayersArray().sort((a, b) => b.score - a.score);
-      socket.emit('game-over', { players: pa, winner: pa[0] });
-    }
-  }
 
-  function sendFullStateToPlayer(socket, room, sessionId) {
-    if (room.state === 'lobby') {
-      socket.emit('players-update', { players: room.getPlayersArray() });
-    } else if (room.state === 'playing') {
-      socket.emit('game-started', {
-        round: room.getRoundData(), roundIndex: room.currentRound,
-        players: room.getPlayersArray(), choosingPlayer: room.selectedByPlayer,
-        choosingPlayerName: room.players.get(room.selectedByPlayer)?.name,
-        autoHost: room.autoHost
-      });
-    } else if (room.state === 'question' || room.state === 'answering') {
-      if (room.currentQuestion) {
-        const q = room.currentQuestion;
-        const catName = room.rounds[room.currentRound].categories[q.catIndex].name;
-        socket.emit('question-show', { category: catName, value: q.value, text: q.text, catIndex: q.catIndex, qIndex: q.qIndex });
-        if (room.state === 'question' && !room.buzzerLocked && !room.wrongAnswers.has(sessionId)) {
-          socket.emit('buzzer-unlocked');
-        }
-        if (room.state === 'answering' && room.currentAnsweringPlayer) {
-          socket.emit('player-answering', { playerId: room.currentAnsweringPlayer, playerName: room.players.get(room.currentAnsweringPlayer)?.name });
-        }
-      }
-    } else if (room.state === 'cat-select') {
-      if (room.currentQuestion) {
-        socket.emit('cat-in-bag', {
-          catTheme: room.currentQuestion.catTheme, value: room.currentQuestion.value,
-          choosingPlayer: room.selectedByPlayer, choosingPlayerName: room.players.get(room.selectedByPlayer)?.name,
-          players: room.getPlayersArray()
+    switch (room.state) {
+      case 'lobby':
+        socket.emit('players-update', { players: room.getPlayersArray() });
+        break;
+      case 'playing':
+        socket.emit('show-board', {
+          round: room.getRoundData(), roundIndex: room.currentRound,
+          players: room.getPlayersArray(), choosingPlayer: room.selectedByPlayer,
+          choosingPlayerName: room.players.get(room.selectedByPlayer)?.name
         });
-      }
-    } else if (room.state === 'auction') {
-      const q = room.currentQuestion;
-      socket.emit('auction-start', { category: room.rounds[room.currentRound].categories[q.catIndex].name, value: q.value, players: room.getPlayersArray() });
-    } else if (room.state === 'final-betting') {
-      const fd = room.finalData || questionsData.finalRound;
-      socket.emit('final-round', { theme: fd.theme, players: room.getPlayersArray(), eligiblePlayers: getEligibleFinalPlayers(room) });
-    } else if (room.state === 'final-answering') {
-      const fd = room.finalData || questionsData.finalRound;
-      socket.emit('final-question', { theme: fd.theme, text: fd.text, timeLimit: 30 });
-    } else if (room.state === 'finished') {
-      const pa = room.getPlayersArray().sort((a, b) => b.score - a.score);
-      socket.emit('game-over', { players: pa, winner: pa[0] });
+        break;
+      case 'question':
+      case 'answering':
+        if (room.currentQuestion) {
+          socket.emit('question-show', makeQuestionPayload(room, room.currentQuestion));
+          socket.emit('host-answer', { answer: room.currentQuestion.answer });
+          if (room.state === 'answering' && room.currentAnsweringPlayer) {
+            socket.emit('player-answering', {
+              playerId: room.currentAnsweringPlayer,
+              playerName: room.players.get(room.currentAnsweringPlayer)?.name
+            });
+          }
+        }
+        break;
+      case 'finished':
+        socket.emit('game-over', {
+          players: room.getPlayersArray().sort((a, b) => b.score - a.score),
+          winner: room.getPlayersArray().sort((a, b) => b.score - a.score)[0]
+        });
+        break;
     }
   }
 
-  // --- Автостарт ---
-  function autoStartGame(room) {
-    room.state = 'playing';
-    room.currentRound = 0;
-    const sessionIds = Array.from(room.players.keys());
-    room.selectedByPlayer = sessionIds[Math.floor(Math.random() * sessionIds.length)];
-
-    io.to(room.id).emit('game-started', {
-      round: room.getRoundData(), roundIndex: room.currentRound,
-      players: room.getPlayersArray(), choosingPlayer: room.selectedByPlayer,
-      choosingPlayerName: room.players.get(room.selectedByPlayer)?.name,
-      autoHost: true
-    });
-    console.log(`Авто-игра началась в ${room.id}`);
+  // --- Полное состояние: игрок ---
+  function sendFullStateToPlayer(socket, room, sessionId) {
+    switch (room.state) {
+      case 'lobby':
+        socket.emit('players-update', { players: room.getPlayersArray() });
+        break;
+      case 'playing':
+        socket.emit('game-started', {
+          round: room.getRoundData(), roundIndex: room.currentRound,
+          players: room.getPlayersArray(), choosingPlayer: room.selectedByPlayer,
+          choosingPlayerName: room.players.get(room.selectedByPlayer)?.name,
+          autoHost: room.autoHost
+        });
+        break;
+      case 'question':
+      case 'answering':
+        if (room.currentQuestion) {
+          socket.emit('question-show', makeQuestionPayload(room, room.currentQuestion));
+          if (room.state === 'question' && !room.buzzerLocked && !room.wrongAnswers.has(sessionId)) {
+            socket.emit('buzzer-unlocked');
+          }
+          if (room.state === 'answering' && room.currentAnsweringPlayer) {
+            socket.emit('player-answering', {
+              playerId: room.currentAnsweringPlayer,
+              playerName: room.players.get(room.currentAnsweringPlayer)?.name
+            });
+          }
+        }
+        break;
+      case 'cat-select':
+        if (room.currentQuestion) {
+          socket.emit('cat-in-bag', {
+            catTheme: room.currentQuestion.catTheme, value: room.currentQuestion.value,
+            choosingPlayer: room.selectedByPlayer,
+            choosingPlayerName: room.players.get(room.selectedByPlayer)?.name,
+            players: room.getPlayersArray()
+          });
+        }
+        break;
+      case 'auction':
+        if (room.currentQuestion) {
+          const catName = room.rounds[room.currentRound].categories[room.currentQuestion.catIndex].name;
+          socket.emit('auction-start', {
+            category: catName, value: room.currentQuestion.value,
+            players: room.getPlayersArray()
+          });
+        }
+        break;
+      case 'final-betting':
+        socket.emit('final-round', {
+          theme: (room.finalData || questionsData.finalRound).theme,
+          players: room.getPlayersArray(),
+          eligiblePlayers: getEligibleFinalPlayers(room)
+        });
+        break;
+      case 'final-answering':
+        socket.emit('final-question', {
+          theme: (room.finalData || questionsData.finalRound).theme,
+          text: (room.finalData || questionsData.finalRound).text,
+          timeLimit: 30
+        });
+        break;
+      case 'finished':
+        socket.emit('game-over', {
+          players: room.getPlayersArray().sort((a, b) => b.score - a.score),
+          winner: room.getPlayersArray().sort((a, b) => b.score - a.score)[0]
+        });
+        break;
+    }
   }
 
-  // --- Начало игры (ведущий) ---
+  // --- Начало игры (живой ведущий) ---
   socket.on('start-game', () => {
     const room = getRoom();
     if (!room || !socket.isHost) return;
@@ -759,8 +770,8 @@ io.on('connection', (socket) => {
 
     room.state = 'playing';
     room.currentRound = 0;
-    const sessionIds = Array.from(room.players.keys());
-    room.selectedByPlayer = sessionIds[Math.floor(Math.random() * sessionIds.length)];
+    const ids = Array.from(room.players.keys());
+    room.selectedByPlayer = ids[Math.floor(Math.random() * ids.length)];
 
     io.to(socket.roomId).emit('game-started', {
       round: room.getRoundData(), roundIndex: room.currentRound,
@@ -775,9 +786,7 @@ io.on('connection', (socket) => {
     if (!room || room.state !== 'playing') return;
 
     const sessId = getSessionId();
-
     if (room.autoHost) {
-      // В авто-режиме выбирающий игрок может выбирать
       if (sessId !== room.selectedByPlayer) return;
     } else {
       if (sessId !== room.selectedByPlayer && !socket.isHost) return;
@@ -789,42 +798,54 @@ io.on('connection', (socket) => {
 
     if (room.autoHost) {
       autoStartQuestion(room, catIndex, qIndex);
-    } else {
-      // Обычный ведущий — старая логика
-      room.currentQuestion = { catIndex, qIndex, ...question };
-      room.wrongAnswers = new Set();
-      room.currentAnsweringPlayer = null;
-      room.catInBagTarget = null;
-      const categoryName = room.rounds[room.currentRound].categories[catIndex].name;
-
-      if (question.type === 'cat') {
-        room.state = 'cat-select';
-        io.to(socket.roomId).emit('cat-in-bag', {
-          catTheme: question.catTheme, value: question.value,
-          choosingPlayer: room.selectedByPlayer,
-          choosingPlayerName: room.players.get(room.selectedByPlayer)?.name,
-          players: room.getPlayersArray()
-        });
-        return;
-      }
-      if (question.type === 'auction') {
-        room.state = 'auction'; room.auctionBets = new Map(); room.auctionPhase = true;
-        io.to(socket.roomId).emit('auction-start', { category: categoryName, value: question.value, players: room.getPlayersArray() });
-        return;
-      }
-
-      room.state = 'question'; room.buzzerLocked = true;
-      io.to(socket.roomId).emit('question-show', { category: categoryName, value: question.value, text: question.text, catIndex, qIndex });
-      io.to(room.getHostSocketId()).emit('host-answer', { answer: question.answer });
-
-      setTimeout(() => {
-        if (room.currentQuestion && room.state === 'question') {
-          room.buzzerLocked = false;
-          io.to(socket.roomId).emit('buzzer-unlocked');
-          room.questionTimer = setTimeout(() => { if (room.state === 'question') endQuestion(room); }, 15000);
-        }
-      }, 3000);
+      return;
     }
+
+    // Живой ведущий
+    room.currentQuestion = { catIndex, qIndex, ...question };
+    room.wrongAnswers = new Set();
+    room.currentAnsweringPlayer = null;
+    room.catInBagTarget = null;
+
+    const categoryName = room.rounds[room.currentRound].categories[catIndex].name;
+
+    if (question.type === 'cat') {
+      room.state = 'cat-select';
+      io.to(socket.roomId).emit('cat-in-bag', {
+        catTheme: question.catTheme, value: question.value,
+        choosingPlayer: room.selectedByPlayer,
+        choosingPlayerName: room.players.get(room.selectedByPlayer)?.name,
+        players: room.getPlayersArray()
+      });
+      return;
+    }
+
+    if (question.type === 'auction') {
+      room.state = 'auction';
+      room.auctionBets = new Map();
+      room.auctionPhase = true;
+      io.to(socket.roomId).emit('auction-start', {
+        category: categoryName, value: question.value,
+        players: room.getPlayersArray()
+      });
+      return;
+    }
+
+    room.state = 'question';
+    room.buzzerLocked = true;
+
+    io.to(socket.roomId).emit('question-show', makeQuestionPayload(room, room.currentQuestion));
+    io.to(room.getHostSocketId()).emit('host-answer', { answer: question.answer });
+
+    setTimeout(() => {
+      if (room.currentQuestion && room.state === 'question') {
+        room.buzzerLocked = false;
+        io.to(socket.roomId).emit('buzzer-unlocked');
+        room.questionTimer = setTimeout(() => {
+          if (room.state === 'question') endQuestion(room);
+        }, 15000);
+      }
+    }, 3000);
   });
 
   // --- Кот в мешке ---
@@ -837,42 +858,64 @@ io.on('connection', (socket) => {
     const target = data.playerId;
     if (!room.players.has(target)) return;
 
-    room.catInBagTarget = target; room.state = 'question'; room.buzzerLocked = true;
-    const q = room.currentQuestion;
-    const catName = room.rounds[room.currentRound].categories[q.catIndex].name;
+    room.catInBagTarget = target;
+    room.state = 'question';
+    room.buzzerLocked = true;
 
-    io.to(socket.roomId).emit('question-show', {
-      category: q.catTheme || catName, value: q.value, text: q.text,
-      catIndex: q.catIndex, qIndex: q.qIndex, catInBag: true,
-      targetPlayer: target, targetPlayerName: room.players.get(target)?.name
-    });
+    const q = room.currentQuestion;
+
+    io.to(socket.roomId).emit('question-show', makeQuestionPayload(room, q, {
+      category: q.catTheme || room.rounds[room.currentRound].categories[q.catIndex].name,
+      catInBag: true,
+      targetPlayer: target,
+      targetPlayerName: room.players.get(target)?.name
+    }));
+
     io.to(room.getHostSocketId()).emit('host-answer', { answer: q.answer });
 
     setTimeout(() => {
       if (room.state === 'question') {
-        room.currentAnsweringPlayer = target; room.state = 'answering';
-        io.to(socket.roomId).emit('player-answering', { playerId: target, playerName: room.players.get(target)?.name });
-        room.timer = setTimeout(() => { if (room.state === 'answering') io.to(room.id).emit('answer-timeout'); }, 20000);
+        room.currentAnsweringPlayer = target;
+        room.state = 'answering';
+        io.to(socket.roomId).emit('player-answering', {
+          playerId: target,
+          playerName: room.players.get(target)?.name
+        });
+        room.timer = setTimeout(() => {
+          if (room.state === 'answering') io.to(room.id).emit('answer-timeout');
+        }, 20000);
       }
     }, 3000);
   });
 
   // --- Аукцион ---
   socket.on('auction-bet', (data) => {
-    const room = getRoom(); if (!room || room.state !== 'auction') return;
-    const sessId = getSessionId(); if (!room.players.has(sessId)) return;
+    const room = getRoom();
+    if (!room || room.state !== 'auction') return;
+    const sessId = getSessionId();
+    if (!room.players.has(sessId)) return;
+
     const player = room.players.get(sessId);
 
-    if (data.allIn) room.auctionBets.set(sessId, { bet: 'all-in', value: Math.max(player.score, room.currentQuestion.value) });
-    else if (data.pass) room.auctionBets.set(sessId, { bet: 'pass', value: 0 });
-    else room.auctionBets.set(sessId, { bet: parseInt(data.bet), value: parseInt(data.bet) });
+    if (data.allIn) {
+      room.auctionBets.set(sessId, { bet: 'all-in', value: Math.max(player.score, room.currentQuestion.value) });
+    } else if (data.pass) {
+      room.auctionBets.set(sessId, { bet: 'pass', value: 0 });
+    } else {
+      room.auctionBets.set(sessId, { bet: parseInt(data.bet), value: parseInt(data.bet) });
+    }
 
-    io.to(socket.roomId).emit('auction-bet-placed', { playerId: sessId, playerName: player.name, betCount: room.auctionBets.size, totalPlayers: room.players.size });
+    io.to(socket.roomId).emit('auction-bet-placed', {
+      playerId: sessId, playerName: player.name,
+      betCount: room.auctionBets.size, totalPlayers: room.players.size
+    });
+
     if (room.auctionBets.size >= room.players.size) finishAuction(room);
   });
 
   socket.on('finish-auction', () => {
-    const room = getRoom(); if (!room || !socket.isHost || room.state !== 'auction') return;
+    const room = getRoom();
+    if (!room || !socket.isHost || room.state !== 'auction') return;
     finishAuction(room);
   });
 
@@ -883,42 +926,44 @@ io.on('connection', (socket) => {
     const sessId = getSessionId();
     if (!room.players.has(sessId) || room.wrongAnswers.has(sessId)) return;
 
-    room.buzzerLocked = true; room.currentAnsweringPlayer = sessId; room.state = 'answering';
+    room.buzzerLocked = true;
+    room.currentAnsweringPlayer = sessId;
+    room.state = 'answering';
     clearTimeout(room.questionTimer);
+
     const player = room.players.get(sessId);
-    io.to(socket.roomId).emit('player-answering', { playerId: sessId, playerName: player.name });
+    io.to(socket.roomId).emit('player-answering', {
+      playerId: sessId, playerName: player.name
+    });
 
     room.timer = setTimeout(() => {
       if (room.state === 'answering' && room.currentAnsweringPlayer === sessId) {
-        if (room.autoHost) {
-          autoJudgeAnswer(room, sessId, '');
-        } else {
-          io.to(room.id).emit('answer-timeout');
-        }
+        if (room.autoHost) autoJudgeAnswer(room, sessId, '');
+        else io.to(room.id).emit('answer-timeout');
       }
     }, 25000);
   });
 
   // --- Текстовый ответ ---
   socket.on('text-answer', (data) => {
-    const room = getRoom(); if (!room) return;
+    const room = getRoom();
+    if (!room) return;
     const sessId = getSessionId();
     if (room.currentAnsweringPlayer !== sessId) return;
+
     const answer = (data.answer || '').substring(0, 200);
     const player = room.players.get(sessId);
 
     if (room.autoHost) {
-      // Бот проверяет автоматически
       autoJudgeAnswer(room, sessId, answer);
     } else {
-      // Отправляем ведущему
       io.to(room.getHostSocketId()).emit('player-text-answer', {
         playerId: sessId, playerName: player.name, answer
       });
     }
   });
 
-  // --- Оценка ответа (живой ведущий) ---
+  // --- Оценка (живой ведущий) ---
   socket.on('judge-answer', (data) => {
     const room = getRoom();
     if (!room || !socket.isHost || !room.currentAnsweringPlayer) return;
@@ -930,131 +975,222 @@ io.on('connection', (socket) => {
     const value = question.value;
 
     if (data.correct) {
-      player.score += value; room.lastCorrectPlayer = sessId; room.selectedByPlayer = sessId;
+      player.score += value;
+      room.lastCorrectPlayer = sessId;
+      room.selectedByPlayer = sessId;
       room.markQuestionAnswered(question.catIndex, question.qIndex);
-      io.to(socket.roomId).emit('answer-result', { correct: true, playerId: sessId, playerName: player.name, value, answer: question.answer, players: room.getPlayersArray() });
-      room.state = 'playing'; room.currentQuestion = null; room.currentAnsweringPlayer = null;
+
+      io.to(socket.roomId).emit('answer-result', {
+        correct: true, playerId: sessId, playerName: player.name,
+        value, answer: question.answer, players: room.getPlayersArray()
+      });
+
+      room.state = 'playing';
+      room.currentQuestion = null;
+      room.currentAnsweringPlayer = null;
       setTimeout(() => checkRoundEnd(room), 2000);
     } else {
-      player.score -= value; room.wrongAnswers.add(sessId);
-      io.to(socket.roomId).emit('answer-result', { correct: false, playerId: sessId, playerName: player.name, value: -value, players: room.getPlayersArray() });
+      player.score -= value;
+      room.wrongAnswers.add(sessId);
+
+      io.to(socket.roomId).emit('answer-result', {
+        correct: false, playerId: sessId, playerName: player.name,
+        value: -value, players: room.getPlayersArray()
+      });
+
       room.currentAnsweringPlayer = null;
+
       if (room.catInBagTarget) { endQuestion(room); return; }
+
       const active = Array.from(room.players.keys()).filter(id => !room.wrongAnswers.has(id));
-      if (active.length === 0) { endQuestion(room); }
-      else {
-        room.state = 'question'; room.buzzerLocked = false;
+      if (active.length === 0) {
+        endQuestion(room);
+      } else {
+        room.state = 'question';
+        room.buzzerLocked = false;
         io.to(socket.roomId).emit('buzzer-unlocked');
-        room.questionTimer = setTimeout(() => { if (room.state === 'question') endQuestion(room); }, 10000);
+        room.questionTimer = setTimeout(() => {
+          if (room.state === 'question') endQuestion(room);
+        }, 10000);
       }
     }
   });
 
-  // --- Пропуск / Раунды ---
-  socket.on('skip-question', () => { const room = getRoom(); if (room && socket.isHost && room.currentQuestion) endQuestion(room); });
-  socket.on('next-round', () => { const room = getRoom(); if (room && socket.isHost) startNextRound(room); });
+  // --- Пропуск ---
+  socket.on('skip-question', () => {
+    const room = getRoom();
+    if (room && socket.isHost && room.currentQuestion) endQuestion(room);
+  });
 
-  // --- Финал ---
+  // --- Следующий раунд ---
+  socket.on('next-round', () => {
+    const room = getRoom();
+    if (room && socket.isHost) startNextRound(room);
+  });
+
+  // --- Финал: ставка ---
   socket.on('final-bet', (data) => {
-    const room = getRoom(); if (!room || room.state !== 'final-betting') return;
-    const sessId = getSessionId(); if (!room.players.has(sessId)) return;
+    const room = getRoom();
+    if (!room || room.state !== 'final-betting') return;
+    const sessId = getSessionId();
+    if (!room.players.has(sessId)) return;
+
     const player = room.players.get(sessId);
     const bet = Math.min(Math.max(0, parseInt(data.bet) || 0), Math.max(player.score, 0));
     room.finalBets.set(sessId, bet);
     socket.emit('final-bet-accepted', { bet });
 
-    if (room.autoHost) {
-      if (room.finalBets.size >= getEligibleFinalPlayers(room).length) startFinalQuestion(room);
-    } else {
-      io.to(room.getHostSocketId()).emit('final-bet-update', { playerId: sessId, playerName: player.name, totalBets: room.finalBets.size, totalPlayers: getEligibleFinalPlayers(room).length });
-      if (room.finalBets.size >= getEligibleFinalPlayers(room).length) startFinalQuestion(room);
+    if (!room.autoHost) {
+      io.to(room.getHostSocketId()).emit('final-bet-update', {
+        playerId: sessId, playerName: player.name,
+        totalBets: room.finalBets.size,
+        totalPlayers: getEligibleFinalPlayers(room).length
+      });
+    }
+
+    if (room.finalBets.size >= getEligibleFinalPlayers(room).length) {
+      startFinalQuestion(room);
     }
   });
 
+  // --- Финал: ответ ---
   socket.on('final-answer', (data) => {
-    const room = getRoom(); if (!room || room.state !== 'final-answering') return;
-    const sessId = getSessionId(); if (!room.players.has(sessId)) return;
+    const room = getRoom();
+    if (!room || room.state !== 'final-answering') return;
+    const sessId = getSessionId();
+    if (!room.players.has(sessId)) return;
+
     room.finalAnswers.set(sessId, data.answer || '');
     const eligible = getEligibleFinalPlayers(room);
 
     if (room.autoHost) {
       if (room.finalAnswers.size >= eligible.length) autoFinalJudge(room);
     } else {
-      io.to(room.getHostSocketId()).emit('final-answer-update', { answersCount: room.finalAnswers.size, totalPlayers: eligible.length });
+      io.to(room.getHostSocketId()).emit('final-answer-update', {
+        answersCount: room.finalAnswers.size, totalPlayers: eligible.length
+      });
       if (room.finalAnswers.size >= eligible.length) showFinalResults(room);
     }
   });
 
+  // --- Финал: оценка (живой ведущий) ---
   socket.on('judge-final', (data) => {
-    const room = getRoom(); if (!room || !socket.isHost) return;
+    const room = getRoom();
+    if (!room || !socket.isHost) return;
+
     for (const result of data.results) {
-      const player = room.players.get(result.playerId); if (!player) continue;
+      const player = room.players.get(result.playerId);
+      if (!player) continue;
       const bet = room.finalBets.get(result.playerId) || 0;
       player.score += result.correct ? bet : -bet;
     }
+
     room.state = 'finished';
     const pa = room.getPlayersArray().sort((a, b) => b.score - a.score);
     io.to(socket.roomId).emit('game-over', { players: pa, winner: pa[0] });
   });
 
-  // --- Очки / Чат ---
+  // --- Очки ---
   socket.on('adjust-score', (data) => {
-    const room = getRoom(); if (!room || !socket.isHost) return;
+    const room = getRoom();
+    if (!room || !socket.isHost) return;
     const player = room.players.get(data.playerId);
-    if (player) { player.score += data.amount; io.to(socket.roomId).emit('players-update', { players: room.getPlayersArray() }); }
+    if (player) {
+      player.score += data.amount;
+      io.to(socket.roomId).emit('players-update', { players: room.getPlayersArray() });
+    }
   });
 
+  // --- Чат ---
   socket.on('chat-message', (data) => {
-    const room = getRoom(); if (!room) return;
+    const room = getRoom();
+    if (!room) return;
     const sessId = getSessionId();
-    const name = socket.isHost ? `🎤 ${room.hostName}` : (room.players.get(sessId)?.name || 'Аноним');
-    io.to(socket.roomId).emit('chat-message', { name, message: data.message.substring(0, 200), timestamp: Date.now() });
+    const name = socket.isHost
+      ? `🎤 ${room.hostName}`
+      : (room.players.get(sessId)?.name || 'Аноним');
+
+    io.to(socket.roomId).emit('chat-message', {
+      name, message: data.message.substring(0, 200), timestamp: Date.now()
+    });
   });
 
   // --- Отключение ---
   socket.on('disconnect', () => {
-    const room = getRoom(); if (!room) return;
+    const room = getRoom();
+    if (!room) return;
     const sessId = getSessionId();
+
     if (socket.isHost) {
+      console.log(`Ведущий отключился от ${socket.roomId}`);
       io.to(socket.roomId).emit('host-disconnected');
     } else if (sessId && room.players.has(sessId)) {
       room.players.get(sessId).connected = false;
-      io.to(socket.roomId).emit('player-disconnected', { playerName: room.players.get(sessId).name, players: room.getPlayersArray() });
+      console.log(`${room.players.get(sessId).name} отключился от ${socket.roomId}`);
+      io.to(socket.roomId).emit('player-disconnected', {
+        playerName: room.players.get(sessId).name,
+        players: room.getPlayersArray()
+      });
     }
   });
 });
 
 // ===== ОБЩИЕ ФУНКЦИИ =====
 function endQuestion(room) {
-  clearTimeout(room.timer); clearTimeout(room.questionTimer);
-  const q = room.currentQuestion; if (!q) return;
+  clearTimeout(room.timer);
+  clearTimeout(room.questionTimer);
+
+  const q = room.currentQuestion;
+  if (!q) return;
+
   room.markQuestionAnswered(q.catIndex, q.qIndex);
-  io.to(room.id).emit('question-end', { answer: q.answer, players: room.getPlayersArray() });
-  room.state = 'playing'; room.currentQuestion = null; room.currentAnsweringPlayer = null;
-  room.catInBagTarget = null; room.buzzerLocked = true;
+
+  io.to(room.id).emit('question-end', {
+    answer: q.answer,
+    players: room.getPlayersArray()
+  });
+
+  room.state = 'playing';
+  room.currentQuestion = null;
+  room.currentAnsweringPlayer = null;
+  room.catInBagTarget = null;
+  room.buzzerLocked = true;
 
   setTimeout(() => checkRoundEnd(room), 3000);
 }
 
 function finishAuction(room) {
   let maxBet = 0, winnerId = null;
-  for (const [s, b] of room.auctionBets) { if (b.bet !== 'pass' && b.value > maxBet) { maxBet = b.value; winnerId = s; } }
+  for (const [s, b] of room.auctionBets) {
+    if (b.bet !== 'pass' && b.value > maxBet) { maxBet = b.value; winnerId = s; }
+  }
   if (!winnerId) { winnerId = room.selectedByPlayer; maxBet = room.currentQuestion.value; }
 
-  room.auctionPhase = false; room.state = 'question'; room.currentQuestion.value = maxBet;
-  const q = room.currentQuestion;
-  const catName = room.rounds[room.currentRound].categories[q.catIndex].name;
+  room.auctionPhase = false;
+  room.state = 'question';
+  room.currentQuestion.value = maxBet;
 
-  io.to(room.id).emit('auction-result', { winnerId, winnerName: room.players.get(winnerId)?.name, bet: maxBet });
+  io.to(room.id).emit('auction-result', {
+    winnerId, winnerName: room.players.get(winnerId)?.name, bet: maxBet
+  });
 
   setTimeout(() => {
-    io.to(room.id).emit('question-show', { category: catName, value: maxBet, text: q.text, catIndex: q.catIndex, qIndex: q.qIndex, auction: true });
-    if (!room.autoHost) io.to(room.getHostSocketId()).emit('host-answer', { answer: q.answer });
+    io.to(room.id).emit('question-show', makeQuestionPayload(room, room.currentQuestion, {
+      value: maxBet, auction: true
+    }));
+
+    if (!room.autoHost) {
+      io.to(room.getHostSocketId()).emit('host-answer', { answer: room.currentQuestion.answer });
+    }
 
     setTimeout(() => {
       if (room.state === 'question') {
-        room.currentAnsweringPlayer = winnerId; room.state = 'answering';
-        io.to(room.id).emit('player-answering', { playerId: winnerId, playerName: room.players.get(winnerId)?.name });
+        room.currentAnsweringPlayer = winnerId;
+        room.state = 'answering';
+        io.to(room.id).emit('player-answering', {
+          playerId: winnerId,
+          playerName: room.players.get(winnerId)?.name
+        });
         room.timer = setTimeout(() => {
           if (room.state === 'answering') {
             if (room.autoHost) autoJudgeAnswer(room, winnerId, '');
@@ -1069,7 +1205,11 @@ function finishAuction(room) {
 function checkRoundEnd(room) {
   if (room.isRoundComplete()) {
     if (room.currentRound < room.rounds.length - 1) {
-      io.to(room.id).emit('round-complete', { roundIndex: room.currentRound, players: room.getPlayersArray(), hasNextRound: true });
+      io.to(room.id).emit('round-complete', {
+        roundIndex: room.currentRound,
+        players: room.getPlayersArray(),
+        hasNextRound: true
+      });
       if (room.autoHost) setTimeout(() => startNextRound(room), 5000);
     } else {
       startFinalRound(room);
@@ -1096,8 +1236,11 @@ function startNextRound(room) {
 
 function startFinalRound(room) {
   const fd = room.finalData || questionsData.finalRound;
-  room.finalTheme = fd.theme; room.state = 'final-betting';
-  room.finalBets = new Map(); room.finalAnswers = new Map();
+  room.finalTheme = fd.theme;
+  room.state = 'final-betting';
+  room.finalBets = new Map();
+  room.finalAnswers = new Map();
+
   const eligible = getEligibleFinalPlayers(room);
   if (eligible.length === 0) {
     room.state = 'finished';
@@ -1105,11 +1248,17 @@ function startFinalRound(room) {
     io.to(room.id).emit('game-over', { players: pa, winner: pa[0] });
     return;
   }
-  io.to(room.id).emit('final-round', { theme: fd.theme, players: room.getPlayersArray(), eligiblePlayers: eligible });
+
+  io.to(room.id).emit('final-round', {
+    theme: fd.theme, players: room.getPlayersArray(), eligiblePlayers: eligible
+  });
 }
 
 function getEligibleFinalPlayers(room) {
-  return Array.from(room.players.keys()).filter(id => { const p = room.players.get(id); return p.score > 0 && p.connected; });
+  return Array.from(room.players.keys()).filter(id => {
+    const p = room.players.get(id);
+    return p.score > 0 && p.connected;
+  });
 }
 
 function startFinalQuestion(room) {
@@ -1125,28 +1274,40 @@ function startFinalQuestion(room) {
 }
 
 function showFinalResults(room) {
-  clearTimeout(room.timer); room.state = 'final-judging';
+  clearTimeout(room.timer);
+  room.state = 'final-judging';
   const fd = room.finalData || questionsData.finalRound;
   const answers = [];
-  for (const [s, a] of room.finalAnswers) answers.push({ playerId: s, playerName: room.players.get(s)?.name, answer: a, bet: room.finalBets.get(s) || 0 });
+  for (const [s, a] of room.finalAnswers) {
+    answers.push({
+      playerId: s, playerName: room.players.get(s)?.name,
+      answer: a, bet: room.finalBets.get(s) || 0
+    });
+  }
   io.to(room.getHostSocketId()).emit('final-judge', { answers, correctAnswer: fd.answer });
-  for (const [s] of room.players) { const sock = room.getSocketId(s); if (sock) io.to(sock).emit('final-waiting', { message: 'Ведущий проверяет...' }); }
+  for (const [s] of room.players) {
+    const sock = room.getSocketId(s);
+    if (sock) io.to(sock).emit('final-waiting', { message: 'Ведущий проверяет...' });
+  }
 }
 
 // Очистка
 setInterval(() => {
   const now = Date.now();
   for (const [id, room] of rooms) {
-    if (now - room.createdAt > 5 * 60 * 60 * 1000) { rooms.delete(id); }
+    if (now - room.createdAt > 5 * 60 * 60 * 1000) {
+      rooms.delete(id);
+      console.log(`Комната ${id} удалена`);
+    }
   }
 }, 30 * 60 * 1000);
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`========================================`);
-  console.log(`  ⭐ СВОЯ ИГРА — сервер запущен`);
+  console.log('========================================');
+  console.log('  ⭐ СВОЯ ИГРА — сервер запущен');
   console.log(`  📡 Порт: ${PORT}`);
-  console.log(`  🤖 Авто-ведущий: включён`);
+  console.log('  🤖 Авто-ведущий: включён');
   console.log(`  🌐 http://localhost:${PORT}`);
-  console.log(`========================================`);
+  console.log('========================================');
 });
