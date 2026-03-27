@@ -560,9 +560,9 @@ io.on('connection', (socket) => {
     sendFullStateToHost(socket, room);
   });
 
-   // --- Вход в комнату ---
+  // --- Вход в комнату ---
   socket.on('join-room', (data) => {
-    const room = rooms.get(data.roomId); // 👈 Убедитесь, что эта строчка на месте!
+    const room = rooms.get(data.roomId);
     if (!room) { socket.emit('error-msg', { message: 'Комната не найдена' }); return; }
 
     if (data.sessionId) {
@@ -583,11 +583,6 @@ io.on('connection', (socket) => {
     room.addPlayer(sessionId, data.name);
     room.playerSocketMap.set(sessionId, socket.id);
 
-    // Если это авто-хост и админ не назначен — назначаем
-    if (room.autoHost && !room.adminSessionId) {
-      room.adminSessionId = sessionId;
-    }
-
     socket.join(data.roomId);
     socket.roomId = data.roomId;
     socket.sessionId = sessionId;
@@ -596,39 +591,29 @@ io.on('connection', (socket) => {
 
     sessions.set(sessionId, { roomId: data.roomId, playerName: data.name, isHost: false });
 
-    const isAdmin = room.autoHost && room.adminSessionId === sessionId;
-
     socket.emit('joined-room', {
       roomId: data.roomId, playerName: data.name, sessionId,
       avatarColor: room.players.get(sessionId).avatarColor,
       players: room.getPlayersArray(),
-      autoHost: room.autoHost,
-      isAdmin: isAdmin
+      autoHost: room.autoHost
     });
 
     io.to(data.roomId).emit('players-update', { players: room.getPlayersArray() });
 
     console.log(`${data.name} → ${data.roomId}`);
 
+// Авто-комната — НЕ стартуем автоматически, ждём кнопку
     if (room.autoHost) {
       io.to(data.roomId).emit('auto-waiting', {
         message: 'Нажмите "Начать игру", когда все подключатся',
         playerCount: room.players.size
       });
     }
-  });
+
   // --- Ручной старт авто-игры ---
   socket.on('auto-start-now', () => {
-    const room = getRoom(); // 👈 Убедитесь, что эта строчка на месте!
+    const room = getRoom();
     if (!room || !room.autoHost || room.state !== 'lobby' || room.players.size < 1) return;
-
-    const sessId = getSessionId();
-
-    if (room.adminSessionId && room.adminSessionId !== sessId) {
-      socket.emit('error-msg', { message: 'Только создатель комнаты может запустить игру!' });
-      return;
-    }
-
     clearTimeout(room.autoStartTimer);
     autoStartGame(room);
   });
