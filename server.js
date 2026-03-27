@@ -602,19 +602,13 @@ io.on('connection', (socket) => {
 
     console.log(`${data.name} → ${data.roomId}`);
 
-    // Авто-старт
-    if (room.autoHost && room.players.size >= 1) {
-      clearTimeout(room.autoStartTimer);
-      room.autoStartTimer = setTimeout(() => {
-        if (room.state === 'lobby' && room.players.size >= 1) autoStartGame(room);
-      }, 10000);
-
-      io.to(data.roomId).emit('auto-countdown', {
-        seconds: 10,
-        message: 'Игра начнётся через 10 секунд...'
+    // Авто-комната — НЕ стартуем автоматически, ждём кнопку
+    if (room.autoHost) {
+      io.to(data.roomId).emit('auto-waiting', {
+        message: 'Нажмите "Начать игру", когда все подключатся',
+        playerCount: room.players.size
       });
     }
-  });
 
   // --- Ручной старт авто-игры ---
   socket.on('auto-start-now', () => {
