@@ -602,14 +602,6 @@ io.on('connection', (socket) => {
 
     console.log(`${data.name} → ${data.roomId}`);
 
-    if (room.autoHost) {
-      io.to(data.roomId).emit('auto-waiting', {
-        message: 'Нажмите "Начать игру", когда все подключатся',
-        playerCount: room.players.size
-      });
-    }
-  });
-
   // --- Ручной старт авто-игры ---
   socket.on('auto-start-now', () => {
     const room = getRoom();
