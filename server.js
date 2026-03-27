@@ -609,13 +609,6 @@ io.on('connection', (socket) => {
       });
     }
   });
-// Авто-комната — НЕ стартуем автоматически, ждём кнопку
-    if (room.autoHost) {
-      io.to(data.roomId).emit('auto-waiting', {
-        message: 'Нажмите "Начать игру", когда все подключатся',
-        playerCount: room.players.size
-      });
-    }
 
   // --- Ручной старт авто-игры ---
   socket.on('auto-start-now', () => {
