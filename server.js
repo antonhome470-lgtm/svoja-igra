@@ -14,50 +14,61 @@ const io = new Server(server, {
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
-app.use(express.json());
+app.use(express.json({ limit: '5mb' }));
 
+// Загрузка стандартных вопросов
 const questionsData = JSON.parse(
   fs.readFileSync(path.join(__dirname, 'questions.json'), 'utf8')
 );
 
-const rooms = new Map();
+// Папка с наборами
+const packsDir = path.join(__dirname, 'packs');
+if (!fs.existsSync(packsDir)) {
+  fs.mkdirSync(packsDir);
+}
 
-// ===== Связь между sessionId и socket =====
-// sessionId → { roomId, playerName, playerId (старый socketId) }
+// Хранилище
+const rooms = new Map();
 const sessions = new Map();
 
+// ===== КЛАСС КОМНАТЫ =====
 class GameRoom {
-  constructor(id, hostId, hostName, hostSessionId) {
+  constructor(id, hostId, hostName, hostSessionId, customQuestions) {
     this.id = id;
     this.hostId = hostId;
     this.hostName = hostName;
     this.hostSessionId = hostSessionId;
-    this.players = new Map(); // sessionId → playerData
-    this.playerSocketMap = new Map(); // sessionId → текущий socketId
+    this.customQuestions = customQuestions || null;
+    this.players = new Map();
+    this.playerSocketMap = new Map();
     this.state = 'lobby';
     this.currentRound = 0;
     this.rounds = this.generateRounds();
     this.currentQuestion = null;
     this.buzzerLocked = true;
-    this.currentAnsweringPlayer = null; // sessionId
-    this.wrongAnswers = new Set(); // sessionId
+    this.currentAnsweringPlayer = null;
+    this.wrongAnswers = new Set();
     this.timer = null;
     this.questionTimer = null;
-    this.selectedByPlayer = null; // sessionId
+    this.selectedByPlayer = null;
     this.lastCorrectPlayer = null;
-    this.catInBagTarget = null; // sessionId
+    this.catInBagTarget = null;
     this.auctionBets = new Map();
     this.auctionPhase = false;
     this.finalBets = new Map();
     this.finalAnswers = new Map();
     this.finalTheme = null;
+    this.finalData = null;
     this.createdAt = Date.now();
   }
 
   generateRounds() {
+    const sourceData = this.customQuestions || questionsData;
+    this.finalData = sourceData.finalRound;
+
     const rounds = [];
-    for (let r = 0; r < questionsData.rounds.length; r++) {
-      const roundData = questionsData.rounds[r];
+    for (let r = 0; r < sourceData.rounds.length; r++) {
+      const roundData = sourceData.rounds[r];
       const categories = [];
       for (const cat of roundData.categories) {
         const questions = [];
@@ -102,7 +113,7 @@ class GameRoom {
   getPlayersArray() {
     return Array.from(this.players.values()).map(p => ({
       ...p,
-      id: p.sessionId // клиент использует id для идентификации
+      id: p.sessionId
     }));
   }
 
@@ -143,12 +154,10 @@ class GameRoom {
     );
   }
 
-  // Получить socketId по sessionId
   getSocketId(sessionId) {
     return this.playerSocketMap.get(sessionId);
   }
 
-  // Получить sessionId по socketId
   getSessionBySocket(socketId) {
     for (const [sessId, sockId] of this.playerSocketMap) {
       if (sockId === socketId) return sessId;
@@ -156,12 +165,12 @@ class GameRoom {
     return null;
   }
 
-  // Отправить всем в комнате
   getHostSocketId() {
     return this.playerSocketMap.get(this.hostSessionId) || this.hostId;
   }
 }
 
+// ===== УТИЛИТЫ =====
 function generateRoomCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let code = '';
@@ -195,16 +204,71 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', rooms: rooms.size });
 });
 
+// API: получить набор вопросов
+app.get('/api/questions/:name', (req, res) => {
+  const name = req.params.name.replace(/[^a-z0-9_-]/gi, '');
+
+  if (name === 'default') {
+    return res.json(questionsData);
+  }
+
+  const packPath = path.join(packsDir, `${name}.json`);
+  if (fs.existsSync(packPath)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(packPath, 'utf8'));
+      return res.json(data);
+    } catch (e) {
+      return res.status(500).json({ error: 'Ошибка чтения набора' });
+    }
+  }
+
+  res.status(404).json({ error: 'Набор не найден' });
+});
+
+// API: список наборов
+app.get('/api/packs', (req, res) => {
+  const packs = [{ id: 'default', name: 'Стандартный' }];
+
+  if (fs.existsSync(packsDir)) {
+    const files = fs.readdirSync(packsDir).filter(f => f.endsWith('.json'));
+    for (const file of files) {
+      const id = file.replace('.json', '');
+      try {
+        const data = JSON.parse(fs.readFileSync(path.join(packsDir, file), 'utf8'));
+        packs.push({
+          id,
+          name: data.packName || id,
+          categories: data.rounds?.[0]?.categories?.length || 0
+        });
+      } catch (e) {
+        // skip broken files
+      }
+    }
+  }
+
+  res.json(packs);
+});
+
 // ===== SOCKET.IO =====
 io.on('connection', (socket) => {
   console.log(`Подключение: ${socket.id}`);
 
-  // --- Создание комнаты (ведущий) ---
+  // --- Вспомогательные ---
+  function getSessionId() {
+    return socket.sessionId;
+  }
+
+  function getRoom() {
+    return rooms.get(socket.roomId);
+  }
+
+  // --- Создание комнаты ---
   socket.on('create-room', (data) => {
     const roomId = generateRoomCode();
     const sessionId = data.sessionId || generateSessionId();
-    const room = new GameRoom(roomId, socket.id, data.name, sessionId);
+    const customQ = data.customQuestions || null;
 
+    const room = new GameRoom(roomId, socket.id, data.name, sessionId, customQ);
     room.playerSocketMap.set(sessionId, socket.id);
     rooms.set(roomId, room);
 
@@ -222,9 +286,11 @@ io.on('connection', (socket) => {
     socket.emit('room-created', {
       roomId,
       hostName: data.name,
-      sessionId
+      sessionId,
+      hasCustomQuestions: !!customQ
     });
-    console.log(`Комната ${roomId} создана: ${data.name}`);
+
+    console.log(`Комната ${roomId} создана: ${data.name}${customQ ? ' (свои вопросы)' : ''}`);
   });
 
   // --- Переподключение ведущего ---
@@ -242,7 +308,6 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // Обновляем socketId ведущего
     room.hostId = socket.id;
     room.playerSocketMap.set(sessionId, socket.id);
 
@@ -252,12 +317,10 @@ io.on('connection', (socket) => {
     socket.isHost = true;
 
     console.log(`Ведущий переподключился к ${roomId}`);
-
-    // Отправляем текущее состояние
     sendFullStateToHost(socket, room);
   });
 
-  // --- Вход в комнату (игрок) ---
+  // --- Вход в комнату ---
   socket.on('join-room', (data) => {
     const room = rooms.get(data.roomId);
     if (!room) {
@@ -265,18 +328,19 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // Проверяем, есть ли sessionId — может быть переподключение
+    // Переподключение по sessionId
     if (data.sessionId) {
       const existing = room.players.get(data.sessionId);
       if (existing) {
-        // Переподключение!
         return handlePlayerReconnect(socket, room, data.sessionId, existing);
       }
     }
 
     // Новый игрок
     if (room.state !== 'lobby') {
-      socket.emit('error-msg', { message: 'Игра уже началась. Если вы были в игре, обновите страницу — система попробует вас вернуть.' });
+      socket.emit('error-msg', {
+        message: 'Игра уже началась. Если вы были в игре, обновите страницу — система попробует вас вернуть.'
+      });
       return;
     }
     if (room.players.size >= 6) {
@@ -335,7 +399,6 @@ io.on('connection', (socket) => {
   });
 
   function handlePlayerReconnect(socket, room, sessionId, player) {
-    // Обновляем socket
     room.playerSocketMap.set(sessionId, socket.id);
     player.connected = true;
 
@@ -347,7 +410,6 @@ io.on('connection', (socket) => {
 
     console.log(`Игрок ${player.name} переподключился к ${room.id}`);
 
-    // Отправляем текущее состояние
     socket.emit('reconnected', {
       roomId: room.id,
       sessionId: sessionId,
@@ -357,7 +419,6 @@ io.on('connection', (socket) => {
 
     sendFullStateToPlayer(socket, room, sessionId);
 
-    // Уведомляем остальных
     io.to(room.id).emit('players-update', {
       players: room.getPlayersArray()
     });
@@ -367,7 +428,7 @@ io.on('connection', (socket) => {
     });
   }
 
-  // --- Отправка полного состояния ведущему ---
+  // --- Полное состояние для ведущего ---
   function sendFullStateToHost(socket, room) {
     socket.emit('reconnected-host', {
       roomId: room.id,
@@ -380,15 +441,16 @@ io.on('connection', (socket) => {
       socket.emit('players-update', {
         players: room.getPlayersArray()
       });
+
     } else if (room.state === 'playing') {
       socket.emit('show-board', {
         round: room.getRoundData(),
         roundIndex: room.currentRound,
         players: room.getPlayersArray(),
         choosingPlayer: room.selectedByPlayer,
-        choosingPlayerName:
-          room.players.get(room.selectedByPlayer)?.name
+        choosingPlayerName: room.players.get(room.selectedByPlayer)?.name
       });
+
     } else if (room.state === 'question' || room.state === 'answering') {
       if (room.currentQuestion) {
         const q = room.currentQuestion;
@@ -411,9 +473,9 @@ io.on('connection', (socket) => {
           });
         }
       }
+
     } else if (room.state === 'finished') {
-      const playersArr = room.getPlayersArray()
-        .sort((a, b) => b.score - a.score);
+      const playersArr = room.getPlayersArray().sort((a, b) => b.score - a.score);
       socket.emit('game-over', {
         players: playersArr,
         winner: playersArr[0]
@@ -421,21 +483,22 @@ io.on('connection', (socket) => {
     }
   }
 
-  // --- Отправка полного состояния игроку ---
+  // --- Полное состояние для игрока ---
   function sendFullStateToPlayer(socket, room, sessionId) {
     if (room.state === 'lobby') {
       socket.emit('players-update', {
         players: room.getPlayersArray()
       });
+
     } else if (room.state === 'playing') {
       socket.emit('game-started', {
         round: room.getRoundData(),
         roundIndex: room.currentRound,
         players: room.getPlayersArray(),
         choosingPlayer: room.selectedByPlayer,
-        choosingPlayerName:
-          room.players.get(room.selectedByPlayer)?.name
+        choosingPlayerName: room.players.get(room.selectedByPlayer)?.name
       });
+
     } else if (room.state === 'question' || room.state === 'answering') {
       if (room.currentQuestion) {
         const q = room.currentQuestion;
@@ -463,17 +526,18 @@ io.on('connection', (socket) => {
           });
         }
       }
+
     } else if (room.state === 'cat-select') {
       if (room.currentQuestion) {
         socket.emit('cat-in-bag', {
           catTheme: room.currentQuestion.catTheme,
           value: room.currentQuestion.value,
           choosingPlayer: room.selectedByPlayer,
-          choosingPlayerName:
-            room.players.get(room.selectedByPlayer)?.name,
+          choosingPlayerName: room.players.get(room.selectedByPlayer)?.name,
           players: room.getPlayersArray()
         });
       }
+
     } else if (room.state === 'auction') {
       const q = room.currentQuestion;
       const categoryName =
@@ -483,21 +547,25 @@ io.on('connection', (socket) => {
         value: q.value,
         players: room.getPlayersArray()
       });
+
     } else if (room.state === 'final-betting') {
+      const finalData = room.finalData || questionsData.finalRound;
       socket.emit('final-round', {
-        theme: room.finalTheme,
+        theme: finalData.theme,
         players: room.getPlayersArray(),
         eligiblePlayers: getEligibleFinalPlayers(room)
       });
+
     } else if (room.state === 'final-answering') {
+      const finalData = room.finalData || questionsData.finalRound;
       socket.emit('final-question', {
-        theme: room.finalTheme,
-        text: questionsData.finalRound.text,
+        theme: finalData.theme,
+        text: finalData.text,
         timeLimit: 30
       });
+
     } else if (room.state === 'finished') {
-      const playersArr = room.getPlayersArray()
-        .sort((a, b) => b.score - a.score);
+      const playersArr = room.getPlayersArray().sort((a, b) => b.score - a.score);
       socket.emit('game-over', {
         players: playersArr,
         winner: playersArr[0]
@@ -505,18 +573,9 @@ io.on('connection', (socket) => {
     }
   }
 
-  // --- Получить sessionId из socket ---
-  function getSessionId(socket) {
-    return socket.sessionId;
-  }
-
-  function getRoom(socket) {
-    return rooms.get(socket.roomId);
-  }
-
   // --- Начало игры ---
   socket.on('start-game', () => {
-    const room = getRoom(socket);
+    const room = getRoom();
     if (!room || !socket.isHost) return;
     if (room.players.size < 1) {
       socket.emit('error-msg', { message: 'Нужен хотя бы 1 игрок' });
@@ -535,17 +594,16 @@ io.on('connection', (socket) => {
       roundIndex: room.currentRound,
       players: room.getPlayersArray(),
       choosingPlayer: room.selectedByPlayer,
-      choosingPlayerName:
-        room.players.get(room.selectedByPlayer)?.name
+      choosingPlayerName: room.players.get(room.selectedByPlayer)?.name
     });
   });
 
   // --- Выбор вопроса ---
   socket.on('select-question', (data) => {
-    const room = getRoom(socket);
+    const room = getRoom();
     if (!room || room.state !== 'playing') return;
 
-    const sessId = getSessionId(socket);
+    const sessId = getSessionId();
     if (sessId !== room.selectedByPlayer && !socket.isHost) return;
 
     const { catIndex, qIndex } = data;
@@ -560,19 +618,20 @@ io.on('connection', (socket) => {
     const categoryName =
       room.rounds[room.currentRound].categories[catIndex].name;
 
-       if (question.type === 'cat') {
+    // Кот в мешке
+    if (question.type === 'cat') {
       room.state = 'cat-select';
       io.to(socket.roomId).emit('cat-in-bag', {
         catTheme: question.catTheme,
         value: question.value,
         choosingPlayer: room.selectedByPlayer,
-        choosingPlayerName:
-          room.players.get(room.selectedByPlayer)?.name,
+        choosingPlayerName: room.players.get(room.selectedByPlayer)?.name,
         players: room.getPlayersArray()
       });
       return;
     }
 
+    // Аукцион
     if (question.type === 'auction') {
       room.state = 'auction';
       room.auctionBets = new Map();
@@ -585,6 +644,7 @@ io.on('connection', (socket) => {
       return;
     }
 
+    // Обычный вопрос
     room.state = 'question';
     room.buzzerLocked = true;
 
@@ -592,7 +652,8 @@ io.on('connection', (socket) => {
       category: categoryName,
       value: question.value,
       text: question.text,
-      catIndex, qIndex
+      catIndex,
+      qIndex
     });
 
     io.to(room.getHostSocketId()).emit('host-answer', {
@@ -611,15 +672,14 @@ io.on('connection', (socket) => {
     }, 3000);
   });
 
-  // --- Кот в мешке ---
+  // --- Кот в мешке: выбор игрока ---
   socket.on('cat-select-player', (data) => {
-    const room = getRoom(socket);
+    const room = getRoom();
     if (!room || room.state !== 'cat-select') return;
 
-    const sessId = getSessionId(socket);
+    const sessId = getSessionId();
     if (sessId !== room.selectedByPlayer && !socket.isHost) return;
 
-    // data.playerId тут это sessionId
     const targetSessionId = data.playerId;
     if (!room.players.has(targetSessionId)) return;
 
@@ -663,12 +723,12 @@ io.on('connection', (socket) => {
     }, 3000);
   });
 
-  // --- Аукцион ---
+  // --- Аукцион: ставка ---
   socket.on('auction-bet', (data) => {
-    const room = getRoom(socket);
+    const room = getRoom();
     if (!room || room.state !== 'auction') return;
 
-    const sessId = getSessionId(socket);
+    const sessId = getSessionId();
     if (!room.players.has(sessId)) return;
 
     const player = room.players.get(sessId);
@@ -698,7 +758,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('finish-auction', () => {
-    const room = getRoom(socket);
+    const room = getRoom();
     if (!room || !socket.isHost) return;
     if (room.state !== 'auction') return;
     finishAuction(room);
@@ -706,11 +766,11 @@ io.on('connection', (socket) => {
 
   // --- Buzzer ---
   socket.on('buzzer', () => {
-    const room = getRoom(socket);
+    const room = getRoom();
     if (!room || room.state !== 'question') return;
     if (room.buzzerLocked) return;
 
-    const sessId = getSessionId(socket);
+    const sessId = getSessionId();
     if (!room.players.has(sessId)) return;
     if (room.wrongAnswers.has(sessId)) return;
 
@@ -736,10 +796,10 @@ io.on('connection', (socket) => {
 
   // --- Текстовый ответ ---
   socket.on('text-answer', (data) => {
-    const room = getRoom(socket);
+    const room = getRoom();
     if (!room) return;
 
-    const sessId = getSessionId(socket);
+    const sessId = getSessionId();
     if (room.currentAnsweringPlayer !== sessId) return;
 
     const answer = (data.answer || '').substring(0, 200);
@@ -754,7 +814,7 @@ io.on('connection', (socket) => {
 
   // --- Оценка ответа ---
   socket.on('judge-answer', (data) => {
-    const room = getRoom(socket);
+    const room = getRoom();
     if (!room || !socket.isHost) return;
     if (!room.currentAnsweringPlayer) return;
 
@@ -822,9 +882,9 @@ io.on('connection', (socket) => {
     }
   });
 
-  // --- Пропуск ---
+  // --- Пропуск вопроса ---
   socket.on('skip-question', () => {
-    const room = getRoom(socket);
+    const room = getRoom();
     if (!room || !socket.isHost) return;
     if (!room.currentQuestion) return;
     endQuestion(room);
@@ -832,17 +892,17 @@ io.on('connection', (socket) => {
 
   // --- Следующий раунд ---
   socket.on('next-round', () => {
-    const room = getRoom(socket);
+    const room = getRoom();
     if (!room || !socket.isHost) return;
     startNextRound(room);
   });
 
-  // --- Финал ---
+  // --- Финал: ставка ---
   socket.on('final-bet', (data) => {
-    const room = getRoom(socket);
+    const room = getRoom();
     if (!room || room.state !== 'final-betting') return;
 
-    const sessId = getSessionId(socket);
+    const sessId = getSessionId();
     if (!room.players.has(sessId)) return;
 
     const player = room.players.get(sessId);
@@ -865,11 +925,12 @@ io.on('connection', (socket) => {
     }
   });
 
+  // --- Финал: ответ ---
   socket.on('final-answer', (data) => {
-    const room = getRoom(socket);
+    const room = getRoom();
     if (!room || room.state !== 'final-answering') return;
 
-    const sessId = getSessionId(socket);
+    const sessId = getSessionId();
     if (!room.players.has(sessId)) return;
 
     room.finalAnswers.set(sessId, data.answer || '');
@@ -885,8 +946,9 @@ io.on('connection', (socket) => {
     }
   });
 
+  // --- Финал: оценка ---
   socket.on('judge-final', (data) => {
-    const room = getRoom(socket);
+    const room = getRoom();
     if (!room || !socket.isHost) return;
 
     for (const result of data.results) {
@@ -897,8 +959,7 @@ io.on('connection', (socket) => {
     }
 
     room.state = 'finished';
-    const playersArr = room.getPlayersArray()
-      .sort((a, b) => b.score - a.score);
+    const playersArr = room.getPlayersArray().sort((a, b) => b.score - a.score);
 
     io.to(socket.roomId).emit('game-over', {
       players: playersArr,
@@ -908,9 +969,9 @@ io.on('connection', (socket) => {
 
   // --- Корректировка очков ---
   socket.on('adjust-score', (data) => {
-    const room = getRoom(socket);
+    const room = getRoom();
     if (!room || !socket.isHost) return;
-    // data.playerId = sessionId
+
     const player = room.players.get(data.playerId);
     if (player) {
       player.score += data.amount;
@@ -922,10 +983,10 @@ io.on('connection', (socket) => {
 
   // --- Чат ---
   socket.on('chat-message', (data) => {
-    const room = getRoom(socket);
+    const room = getRoom();
     if (!room) return;
 
-    const sessId = getSessionId(socket);
+    const sessId = getSessionId();
     const name = socket.isHost
       ? `🎤 ${room.hostName}`
       : (room.players.get(sessId)?.name || 'Аноним');
@@ -939,15 +1000,14 @@ io.on('connection', (socket) => {
 
   // --- Отключение ---
   socket.on('disconnect', () => {
-    const room = getRoom(socket);
+    const room = getRoom();
     if (!room) return;
 
-    const sessId = getSessionId(socket);
+    const sessId = getSessionId();
 
     if (socket.isHost) {
       console.log(`Ведущий отключился от ${socket.roomId}`);
       io.to(socket.roomId).emit('host-disconnected');
-      // НЕ удаляем комнату — даём время на reconnect
     } else {
       if (sessId && room.players.has(sessId)) {
         room.players.get(sessId).connected = false;
@@ -1065,8 +1125,7 @@ function checkRoundEnd(room) {
       roundIndex: room.currentRound,
       players: room.getPlayersArray(),
       choosingPlayer: room.selectedByPlayer,
-      choosingPlayerName:
-        room.players.get(room.selectedByPlayer)?.name
+      choosingPlayerName: room.players.get(room.selectedByPlayer)?.name
     });
   }
 }
@@ -1084,13 +1143,12 @@ function startNextRound(room) {
     roundIndex: room.currentRound,
     players: room.getPlayersArray(),
     choosingPlayer: room.selectedByPlayer,
-    choosingPlayerName:
-      room.players.get(room.selectedByPlayer)?.name
+    choosingPlayerName: room.players.get(room.selectedByPlayer)?.name
   });
 }
 
 function startFinalRound(room) {
-  const finalData = questionsData.finalRound;
+  const finalData = room.finalData || questionsData.finalRound;
   room.finalTheme = finalData.theme;
   room.state = 'final-betting';
   room.finalBets = new Map();
@@ -1100,8 +1158,7 @@ function startFinalRound(room) {
 
   if (eligible.length === 0) {
     room.state = 'finished';
-    const playersArr = room.getPlayersArray()
-      .sort((a, b) => b.score - a.score);
+    const playersArr = room.getPlayersArray().sort((a, b) => b.score - a.score);
     io.to(room.id).emit('game-over', {
       players: playersArr,
       winner: playersArr[0]
@@ -1125,7 +1182,7 @@ function getEligibleFinalPlayers(room) {
 
 function startFinalQuestion(room) {
   room.state = 'final-answering';
-  const finalData = questionsData.finalRound;
+  const finalData = room.finalData || questionsData.finalRound;
 
   io.to(room.id).emit('final-question', {
     theme: finalData.theme,
@@ -1144,6 +1201,7 @@ function showFinalResults(room) {
   clearTimeout(room.timer);
   room.state = 'final-judging';
 
+  const finalData = room.finalData || questionsData.finalRound;
   const answers = [];
   for (const [sessId, answer] of room.finalAnswers) {
     answers.push({
@@ -1156,10 +1214,9 @@ function showFinalResults(room) {
 
   io.to(room.getHostSocketId()).emit('final-judge', {
     answers,
-    correctAnswer: questionsData.finalRound.answer
+    correctAnswer: finalData.answer
   });
 
-  // Уведомляем игроков
   for (const [sessId] of room.players) {
     const sockId = room.getSocketId(sessId);
     if (sockId) {
@@ -1170,22 +1227,24 @@ function showFinalResults(room) {
   }
 }
 
-// Очистка
+// Очистка старых комнат
 setInterval(() => {
   const now = Date.now();
   for (const [id, room] of rooms) {
     if (now - room.createdAt > 5 * 60 * 60 * 1000) {
       rooms.delete(id);
-      console.log(`Комната ${id} удалена`);
+      console.log(`Комната ${id} удалена (устарела)`);
     }
   }
 }, 30 * 60 * 1000);
 
+// ===== ЗАПУСК =====
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`========================================`);
   console.log(`  ⭐ СВОЯ ИГРА — сервер запущен`);
   console.log(`  📡 Порт: ${PORT}`);
   console.log(`  🌐 http://localhost:${PORT}`);
+  console.log(`  📦 Наборов вопросов: ${fs.existsSync(packsDir) ? fs.readdirSync(packsDir).filter(f => f.endsWith('.json')).length + 1 : 1}`);
   console.log(`========================================`);
 });
