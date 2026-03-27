@@ -600,12 +600,28 @@ io.on('connection', (socket) => {
 
     io.to(data.roomId).emit('players-update', { players: room.getPlayersArray() });
 
-    console.log(`${data.name} → ${data.roomId}`);
+        console.log(`${data.name} → ${data.roomId}`);
+
+    if (room.autoHost) {
+      io.to(data.roomId).emit('auto-waiting', {
+        message: 'Нажмите "Начать игру", когда все подключатся',
+        playerCount: room.players.size
+      });
+    }
+  });
 
   // --- Ручной старт авто-игры ---
   socket.on('auto-start-now', () => {
     const room = getRoom();
     if (!room || !room.autoHost || room.state !== 'lobby' || room.players.size < 1) return;
+
+    const sessId = getSessionId();
+
+    if (room.adminSessionId && room.adminSessionId !== sessId) {
+      socket.emit('error-msg', { message: 'Только создатель комнаты может запустить игру!' });
+      return;
+    }
+
     clearTimeout(room.autoStartTimer);
     autoStartGame(room);
   });
