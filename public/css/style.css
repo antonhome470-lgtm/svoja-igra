@@ -1445,3 +1445,213 @@ body {
   background: rgba(255, 23, 68, 0.1);
   opacity: 0.7;
 }
+
+/* ===== КНОПКА ВЫХОДА ===== */
+.btn-exit {
+  background: rgba(255, 23, 68, 0.2);
+  border: 2px solid rgba(255, 23, 68, 0.5);
+  color: var(--danger);
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  transition: all 0.3s;
+}
+
+.btn-exit:hover {
+  background: rgba(255, 23, 68, 0.4);
+  border-color: var(--danger);
+  transform: scale(1.05);
+}
+
+/* ===== ТАЙМЕР ВОПРОСА ===== */
+.question-timer-bar {
+  position: fixed;
+  top: 70px;
+  left: 0;
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  z-index: 55;
+}
+
+.question-timer-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--success), var(--secondary));
+  transition: width 1s linear;
+  border-radius: 0 3px 3px 0;
+}
+
+.question-timer-fill.warning {
+  background: linear-gradient(90deg, var(--warning), var(--danger));
+}
+
+.question-timer-fill.critical {
+  background: var(--danger);
+  animation: pulse 0.5s infinite;
+}
+
+.question-timer-text {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  font-family: 'Russo One', sans-serif;
+  font-size: 28px;
+  color: var(--secondary);
+  z-index: 56;
+  text-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+}
+
+.question-timer-text.warning {
+  color: var(--warning);
+}
+
+.question-timer-text.critical {
+  color: var(--danger);
+  animation: pulse 0.5s infinite;
+}
+
+/* ===== ВАРИАНТЫ ОТВЕТА ===== */
+.answer-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  max-width: 700px;
+  width: 100%;
+  margin-top: 20px;
+  padding: 0 20px;
+}
+
+.answer-option-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: 15px;
+  padding: 18px 20px;
+  color: var(--text-primary);
+  font-size: 18px;
+  cursor: pointer;
+  transition: all 0.3s;
+  text-align: center;
+  word-wrap: break-word;
+  position: relative;
+  overflow: hidden;
+}
+
+.answer-option-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent);
+  transition: left 0.4s;
+}
+
+.answer-option-btn:hover::before {
+  left: 100%;
+}
+
+.answer-option-btn:hover {
+  border-color: var(--secondary);
+  background: rgba(255, 214, 0, 0.1);
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(255, 214, 0, 0.2);
+}
+
+.answer-option-btn:active {
+  transform: scale(0.97);
+}
+
+.answer-option-btn.selected {
+  border-color: var(--secondary);
+  background: rgba(255, 214, 0, 0.2);
+  box-shadow: 0 0 20px rgba(255, 214, 0, 0.3);
+}
+
+.answer-option-btn.correct {
+  border-color: var(--success);
+  background: rgba(0, 230, 118, 0.2);
+  animation: correctAnswer 1s;
+}
+
+.answer-option-btn.wrong {
+  border-color: var(--danger);
+  background: rgba(255, 23, 68, 0.2);
+  opacity: 0.7;
+}
+
+.answer-option-btn .option-letter {
+  display: inline-block;
+  width: 32px;
+  height: 32px;
+  line-height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 214, 0, 0.2);
+  color: var(--secondary);
+  font-family: 'Russo One', sans-serif;
+  font-size: 16px;
+  margin-right: 10px;
+  text-align: center;
+}
+
+.answer-option-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+@media (max-width: 600px) {
+  .answer-options {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .answer-option-btn {
+    padding: 14px 15px;
+    font-size: 15px;
+  }
+}
+
+/* ===== ПОДТВЕРЖДЕНИЕ ВЫХОДА ===== */
+.exit-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+  backdrop-filter: blur(5px);
+}
+
+.exit-modal-content {
+  background: var(--bg-card);
+  border: 2px solid var(--danger);
+  border-radius: 20px;
+  padding: 30px;
+  text-align: center;
+  max-width: 400px;
+  width: 90%;
+  animation: fadeIn 0.3s;
+}
+
+.exit-modal-content h2 {
+  color: var(--danger);
+  font-family: 'Russo One', sans-serif;
+  margin-bottom: 15px;
+}
+
+.exit-modal-content p {
+  color: var(--text-secondary);
+  margin-bottom: 25px;
+}
+
+.exit-modal-buttons {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
