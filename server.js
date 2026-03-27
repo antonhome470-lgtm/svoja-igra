@@ -560,7 +560,7 @@ io.on('connection', (socket) => {
     sendFullStateToHost(socket, room);
   });
 
-  // --- Вход в комнату ---
+    // --- Вход в комнату ---
   socket.on('join-room', (data) => {
     const room = rooms.get(data.roomId);
     if (!room) { socket.emit('error-msg', { message: 'Комната не найдена' }); return; }
@@ -602,6 +602,13 @@ io.on('connection', (socket) => {
 
     console.log(`${data.name} → ${data.roomId}`);
 
+    if (room.autoHost) {
+      io.to(data.roomId).emit('auto-waiting', {
+        message: 'Нажмите "Начать игру", когда все подключатся',
+        playerCount: room.players.size
+      });
+    }
+  });
 // Авто-комната — НЕ стартуем автоматически, ждём кнопку
     if (room.autoHost) {
       io.to(data.roomId).emit('auto-waiting', {
