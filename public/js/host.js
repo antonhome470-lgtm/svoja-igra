@@ -17,28 +17,34 @@ let sessionId = null;
 (function init() {
   const params = new URLSearchParams(window.location.search);
 
-  // Проверяем сохранённую сессию ведущего
   const savedSession = localStorage.getItem('host_session');
   const savedRoom = localStorage.getItem('host_room');
-  const savedName = localStorage.getItem('host_name');
 
   if (savedSession && savedRoom) {
-    // Пытаемся переподключиться
     roomId = savedRoom;
     sessionId = savedSession;
-    console.log('Ведущий: переподключение к', roomId);
     socket.emit('host-reconnect', { sessionId: savedSession, roomId: savedRoom });
   } else {
-    // Новая комната
     const hostData = JSON.parse(sessionStorage.getItem('hostData') || '{}');
     const hostName = hostData.hostName || 'Ведущий';
-    socket.emit('create-room', { name: hostName });
+
+    // Проверяем кастомные вопросы
+    const useCustom = sessionStorage.getItem('useCustomQuestions');
+    const customQuestions = sessionStorage.getItem('customQuestions');
+
+    const data = { name: hostName };
+    if (useCustom && customQuestions) {
+      try {
+        data.customQuestions = JSON.parse(customQuestions);
+        sessionStorage.removeItem('useCustomQuestions');
+      } catch (e) {
+        console.error('Ошибка парсинга кастомных вопросов');
+      }
+    }
+
+    socket.emit('create-room', data);
   }
 })();
-
-socket.on('room-created', (data) => {
-  roomId = data.roomId;
-  sessionId = data.sessionId;
 
   // Сохраняем сессию
   localStorage.setItem('host_session', data.sessionId);
