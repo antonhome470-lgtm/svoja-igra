@@ -37,15 +37,28 @@ function createRoom() {
     return;
   }
 
-  socket.emit('create-room', { name });
+  // Проверяем, есть ли кастомные вопросы
+  const useCustom = sessionStorage.getItem('useCustomQuestions');
+  const customQuestions = sessionStorage.getItem('customQuestions');
+
+  const data = { name };
+  if (useCustom && customQuestions) {
+    data.customQuestions = JSON.parse(customQuestions);
+    sessionStorage.removeItem('useCustomQuestions');
+    // НЕ удаляем customQuestions — пригодится для повторной игры
+  }
+
+  socket.emit('create-room', data);
 }
 
-socket.on('room-created', (data) => {
-  // Перенаправляем на страницу ведущего
-  sessionStorage.setItem('hostData', JSON.stringify(data));
-  sessionStorage.setItem('socketReconnect', 'host');
-  window.location.href = `/host.html?room=${data.roomId}`;
-});
+// Если пришли из редактора — сразу показываем модалку ведущего
+(function checkCustom() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('custom') === '1') {
+    showModal('host');
+    showNotification('📝 Свои вопросы загружены! Введите имя и создайте игру.', 'success', 5000);
+  }
+})();
 
 // ===== ПРИСОЕДИНЕНИЕ =====
 function joinRoom() {
