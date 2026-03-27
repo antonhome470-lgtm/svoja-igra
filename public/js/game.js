@@ -190,16 +190,13 @@ function renderAutoStartButton() {
   const lobby = document.getElementById('lobby');
   if (!lobby) return;
 
-  // Удаляем старую кнопку если есть
   const old = document.getElementById('auto-start-btn');
   if (old) old.remove();
 
-  // Удаляем старый текст ожидания
   const oldWait = document.getElementById('auto-waiting-text');
   if (oldWait) oldWait.remove();
 
   if (players.length >= 1) {
-    // Показываем информацию и кнопку
     const wrapper = document.createElement('div');
     wrapper.id = 'auto-waiting-text';
     wrapper.style.cssText = 'text-align: center; margin-top: 20px;';
@@ -246,7 +243,6 @@ function renderLobbyPlayers() {
     c.appendChild(card);
   });
 
-  // Обновляем текст ожидания в обычном лобби
   const waitText = document.querySelector('.waiting-text');
   if (waitText && !isAutoHost) {
     waitText.textContent = players.length > 0
