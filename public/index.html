@@ -15,23 +15,50 @@
     <div class="main-title">⭐ СВОЯ ИГРА</div>
     <div class="main-subtitle">Классическая телевикторина — теперь онлайн!</div>
 
-    <div class="menu-container">
+        <div class="menu-container">
       <div class="menu-card" onclick="showModal('host')">
         <div class="icon">🎤</div>
         <h2>Ведущий</h2>
         <p>Создайте комнату, управляйте игрой и оценивайте ответы игроков</p>
       </div>
 
+      <div class="menu-card" onclick="showModal('auto')">
+        <div class="icon">🤖</div>
+        <h2>Авто-игра</h2>
+        <p>Бот-ведущий автоматически проверяет ответы. Просто играйте!</p>
+      </div>
+
       <div class="menu-card" onclick="showModal('player')">
         <div class="icon">🎮</div>
         <h2>Игрок</h2>
-        <p>Присоединитесь к комнате по коду и соревнуйтесь с другими игроками</p>
+        <p>Присоединитесь к комнате по коду и соревнуйтесь с другими</p>
       </div>
 
       <div class="menu-card" onclick="window.location.href='/editor.html'">
         <div class="icon">📝</div>
         <h2>Редактор</h2>
-        <p>Создайте свой набор вопросов или выберите из готовых тематических паков</p>
+        <p>Создайте свой набор вопросов или выберите из готовых паков</p>
+      </div>
+    </div>
+
+    <!-- Модальное окно — Авто-игра -->
+    <div id="modal-auto" class="modal-overlay hidden" onclick="closeModal(event, 'auto')">
+      <div class="modal" onclick="event.stopPropagation()">
+        <h2>🤖 Авто-игра</h2>
+        <p style="color: var(--text-secondary); margin-bottom: 20px; text-align: center;">
+          Бот-ведущий сам проверяет ответы.<br>Создайте комнату и пригласите друзей!
+        </p>
+        <div class="form-group">
+          <label>Ваше имя (вы будете первым игроком)</label>
+          <input type="text" id="auto-name" placeholder="Ваше имя" maxlength="20" autocomplete="off">
+        </div>
+        <button class="btn btn-primary btn-full" onclick="createAutoRoom()">
+          🤖 Создать авто-комнату
+        </button>
+        <br><br>
+        <button class="btn btn-secondary btn-full" onclick="hideModal('auto')">
+          Отмена
+        </button>
       </div>
     </div>
 
