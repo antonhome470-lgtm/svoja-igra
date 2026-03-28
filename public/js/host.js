@@ -356,6 +356,17 @@ socket.on('answer-result', (data) => {
   }
 });
 
+  // ===== ПРОПУСК ОТВЕТА =====
+socket.on('player-skipped', (data) => {
+  showNotification(`⏭️ ${data.playerName} пропустил вопрос`, 'info', 3000);
+
+  // Убираем кнопки оценки
+  document.getElementById('judge-buttons').classList.add('hidden');
+  document.getElementById('judge-buttons').style.display = 'none';
+  const oldBox = document.getElementById('player-answer-box');
+  if (oldBox) oldBox.remove();
+});
+
 socket.on('answer-timeout', () => {
   showNotification('⏰ Время вышло!', 'warning');
 });
