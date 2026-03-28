@@ -17,14 +17,19 @@ let sessionId = null;
 (function init() {
   const params = new URLSearchParams(window.location.search);
 
+  // Проверяем сохранённую сессию ведущего
   const savedSession = localStorage.getItem('host_session');
   const savedRoom = localStorage.getItem('host_room');
+  const savedName = localStorage.getItem('host_name');
 
   if (savedSession && savedRoom) {
+    // Пытаемся переподключиться
     roomId = savedRoom;
     sessionId = savedSession;
+    console.log('Ведущий: переподключение к', roomId);
     socket.emit('host-reconnect', { sessionId: savedSession, roomId: savedRoom });
   } else {
+    // Новая комната
     const hostData = JSON.parse(sessionStorage.getItem('hostData') || '{}');
     const hostName = hostData.hostName || 'Ведущий';
 
@@ -71,6 +76,7 @@ socket.on('reconnected-host', (data) => {
 
   showNotification('🔄 Переподключено!', 'success', 3000);
   renderPlayersBar();
+  renderLobbyPlayers();
 });
 
 socket.on('reconnect-failed', (data) => {
@@ -79,6 +85,8 @@ socket.on('reconnect-failed', (data) => {
   localStorage.removeItem('host_room');
   localStorage.removeItem('host_name');
 
+  showNotification('Не удалось переподключиться. Создаём новую комнату...', 'error', 3000);
+
   const hostData = JSON.parse(sessionStorage.getItem('hostData') || '{}');
   socket.emit('create-room', { name: hostData.hostName || 'Ведущий' });
 });
@@ -86,6 +94,7 @@ socket.on('reconnect-failed', (data) => {
 socket.on('connect', () => {
   console.log('Socket подключён:', socket.id);
   if (sessionId && roomId) {
+    console.log('Ведущий: авто-переподключение к', roomId);
     socket.emit('host-reconnect', { sessionId, roomId });
   }
 });
@@ -97,6 +106,28 @@ socket.on('disconnect', () => {
 socket.on('player-reconnected', (data) => {
   showNotification(`🔄 ${data.playerName} вернулся`, 'success', 2000);
 });
+
+// ===== ВЫХОД =====
+function exitGame() {
+  const modal = document.createElement('div');
+  modal.className = 'exit-modal';
+  modal.innerHTML = `
+    <div class="exit-modal-content">
+      <h2>🚪 Выйти из игры?</h2>
+      <p>Вы сможете вернуться, пока игра идёт. Ваша сессия сохранится.</p>
+      <div class="exit-modal-buttons">
+        <button class="btn btn-danger" onclick="confirmExit()">Выйти</button>
+        <button class="btn btn-secondary" onclick="this.closest('.exit-modal').remove()">Остаться</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
+function confirmExit() {
+  // НЕ удаляем сессию — чтобы можно было вернуться!
+  window.location.href = '/';
+}
 
 // ===== УТИЛИТЫ =====
 function copyRoomCode() {
