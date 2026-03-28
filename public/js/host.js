@@ -46,7 +46,10 @@ let sessionId = null;
   }
 })();
 
-  // Сохраняем сессию
+socket.on('room-created', (data) => {
+  roomId = data.roomId;
+  sessionId = data.sessionId;
+
   localStorage.setItem('host_session', data.sessionId);
   localStorage.setItem('host_room', data.roomId);
   localStorage.setItem('host_name', data.hostName);
@@ -54,6 +57,7 @@ let sessionId = null;
   document.getElementById('room-code').textContent = roomId;
   document.getElementById('lobby-room-code').textContent = roomId;
   window.history.replaceState({}, '', `/host.html?room=${roomId}`);
+});
 
 // ===== ПЕРЕПОДКЛЮЧЕНИЕ =====
 socket.on('reconnected-host', (data) => {
