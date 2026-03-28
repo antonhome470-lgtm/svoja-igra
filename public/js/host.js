@@ -561,12 +561,12 @@ function submitFinalResults() {
 }
 
 // ===== GAME OVER =====
+
 socket.on('game-over', (data) => {
   // Очищаем сессию ведущего
   localStorage.removeItem('host_session');
   localStorage.removeItem('host_room');
   localStorage.removeItem('host_name');
-
   hideAllScreens();
   const screen = document.getElementById('results-screen');
   screen.classList.remove('hidden');
