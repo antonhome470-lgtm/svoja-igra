@@ -54,7 +54,6 @@ let sessionId = null;
   document.getElementById('room-code').textContent = roomId;
   document.getElementById('lobby-room-code').textContent = roomId;
   window.history.replaceState({}, '', `/host.html?room=${roomId}`);
-});
 
 // ===== ПЕРЕПОДКЛЮЧЕНИЕ =====
 socket.on('reconnected-host', (data) => {
