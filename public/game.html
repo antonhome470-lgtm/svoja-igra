@@ -65,19 +65,22 @@
   </button>
 
   <!-- НОВОЕ: Поле для текстового ответа -->
-  <div id="answer-input-area" class="hidden" style="margin-top: 20px; width: 100%; max-width: 500px;">
-    <div style="font-size: 18px; color: var(--secondary); margin-bottom: 10px;">
-      ✏️ Введите ваш ответ:
-    </div>
-    <input type="text" id="answer-text-input" class="answer-text-input"
-           placeholder="Ваш ответ..." maxlength="200" autocomplete="off">
-    <button class="btn btn-primary btn-full" onclick="sendTextAnswer()"
-            id="send-answer-btn" style="margin-top: 10px;">
-      📩 Отправить ответ
-    </button>
-    <div id="answer-timer" class="answer-timer"></div>
-  </div>
-</div>
+        <div id="answer-input-area" class="hidden" style="margin-top: 20px; width: 100%; max-width: 500px;">
+          <div style="font-size: 18px; color: var(--secondary); margin-bottom: 10px;">
+            ✏️ Введите ваш ответ:
+          </div>
+          <input type="text" id="answer-text-input" class="answer-text-input"
+                 placeholder="Ваш ответ..." maxlength="200" autocomplete="off">
+          <div style="display: flex; gap: 10px; margin-top: 10px;">
+            <button class="btn btn-primary" onclick="sendTextAnswer()" id="send-answer-btn" style="flex: 1;">
+              📩 Отправить
+            </button>
+            <button class="btn btn-secondary" onclick="skipAnswer()" id="skip-answer-btn" style="flex: 1;">
+              ⏭️ Пропустить
+            </button>
+          </div>
+          <div id="answer-timer" class="answer-timer"></div>
+        </div>
 
     <!-- Кот в мешке (для выбирающего игрока) -->
     <div id="cat-screen" class="special-overlay hidden">
