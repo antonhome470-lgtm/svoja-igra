@@ -396,9 +396,9 @@ function autoStartQuestion(room, catIndex, qIndex) {
           });
           room.timer = setTimeout(() => {
             if (room.state === 'answering') autoJudgeAnswer(room, target, '');
-          }, 25000);
+          }, 41000);
         }
-      }, 3000);
+      }, 4000);
     }, 2000);
     return;
   }
@@ -426,7 +426,7 @@ function autoStartQuestion(room, catIndex, qIndex) {
             if (room.state === 'question') endQuestion(room);
           }, 35000);
         }
-      }, 3000);
+      }, 4000);
     }, 2000);
     return;
   }
@@ -445,7 +445,7 @@ function autoStartQuestion(room, catIndex, qIndex) {
         if (room.state === 'question') endQuestion(room);
       }, 35000);
     }
-  }, 3000);
+  }, 4000);
 }
 
 function autoFinalJudge(room) {
@@ -856,9 +856,9 @@ io.on('connection', (socket) => {
         io.to(socket.roomId).emit('buzzer-unlocked');
         room.questionTimer = setTimeout(() => {
           if (room.state === 'question') endQuestion(room);
-        }, 15000);
+        }, 31000);
       }
-    }, 3000);
+    }, 4000);
   });
 
   // --- Кот в мешке ---
@@ -898,7 +898,7 @@ io.on('connection', (socket) => {
           if (room.state === 'answering') io.to(room.id).emit('answer-timeout');
         }, 45000);
       }
-    }, 3000);
+    }, 4000);
   });
 
   // --- Аукцион ---
@@ -954,7 +954,7 @@ io.on('connection', (socket) => {
         if (room.autoHost) autoJudgeAnswer(room, sessId, '');
         else io.to(room.id).emit('answer-timeout');
       }
-    }, 25000);
+    }, 41000);
   });
 
   // --- Текстовый ответ ---
@@ -1258,7 +1258,7 @@ function endQuestion(room) {
   room.catInBagTarget = null;
   room.buzzerLocked = true;
 
-  setTimeout(() => checkRoundEnd(room), 3000);
+  setTimeout(() => checkRoundEnd(room), 4000);
 }
 
 function finishAuction(room) {
@@ -1298,9 +1298,9 @@ function finishAuction(room) {
             if (room.autoHost) autoJudgeAnswer(room, winnerId, '');
             else io.to(room.id).emit('answer-timeout');
           }
-        }, 25000);
+        }, 41000);
       }
-    }, 3000);
+    }, 4000);
   }, 2000);
 }
 
