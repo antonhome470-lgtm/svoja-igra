@@ -551,20 +551,21 @@ socket.on('answer-result', (data) => {
     showNotification(`✅ ${data.playerName} +${data.value}!`, 'success');
     highlightPlayer(data.playerId, 'correct');
     if (data.playerId === myId && navigator.vibrate) navigator.vibrate([200, 100, 200]);
-  } else {
-    showNotification(`❌ ${data.playerName} ${data.value}`, 'error');
-    highlightPlayer(data.playerId, 'wrong');
-  }
-  if (data.correct && data.answer) {
+    // Показываем правильный ответ только когда кто-то ответил верно
     setTimeout(() => {
       document.getElementById('q-answer-area').classList.remove('hidden');
       document.getElementById('q-answer').textContent = data.answer;
     }, 500);
+  } else {
+    // НЕ показываем правильный ответ — вопрос ещё активен для других
+    showNotification(`❌ ${data.playerName} −${Math.abs(data.value)}`, 'error');
+    highlightPlayer(data.playerId, 'wrong');
   }
 });
 
 socket.on('auto-wrong-detail', (data) => {
-  showNotification(`❌ ${data.playerName}: "${data.playerAnswer}" → Правильно: "${data.correctAnswer}"`, 'error', 5000);
+  // Показываем только чей ответ был неправильным, БЕЗ правильного ответа
+  showNotification(`❌ ${data.playerName} ответил неверно`, 'error', 3000);
 });
 
 socket.on('answer-timeout', () => {
