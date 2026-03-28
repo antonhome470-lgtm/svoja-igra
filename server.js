@@ -424,7 +424,7 @@ function autoStartQuestion(room, catIndex, qIndex) {
           io.to(room.id).emit('buzzer-unlocked');
           room.questionTimer = setTimeout(() => {
             if (room.state === 'question') endQuestion(room);
-          }, 15000);
+          }, 35000);
         }
       }, 3000);
     }, 2000);
@@ -443,7 +443,7 @@ function autoStartQuestion(room, catIndex, qIndex) {
       io.to(room.id).emit('buzzer-unlocked');
       room.questionTimer = setTimeout(() => {
         if (room.state === 'question') endQuestion(room);
-      }, 15000);
+      }, 35000);
     }
   }, 3000);
 }
@@ -896,7 +896,7 @@ io.on('connection', (socket) => {
         });
         room.timer = setTimeout(() => {
           if (room.state === 'answering') io.to(room.id).emit('answer-timeout');
-        }, 20000);
+        }, 45000);
       }
     }, 3000);
   });
