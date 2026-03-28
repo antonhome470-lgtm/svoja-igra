@@ -261,7 +261,6 @@ function renderLobbyPlayers() {
   } else if (waitText && isAutoHost) {
     waitText.textContent = '';
   }
-}
 
 // ===== ИГРА =====
 socket.on('game-started', (data) => {
