@@ -1103,6 +1103,38 @@ io.on('connection', (socket) => {
     io.to(socket.roomId).emit('game-over', { players: pa, winner: pa[0] });
   });
 
+    // --- Принудительное завершение игры ---
+  socket.on('force-end-game', () => {
+    const room = getRoom();
+    if (!room || !socket.isHost) return;
+
+    // Очищаем таймеры
+    clearTimeout(room.timer);
+    clearTimeout(room.questionTimer);
+    clearTimeout(room.autoStartTimer);
+
+    room.state = 'finished';
+
+    const playersArr = room.getPlayersArray().sort((a, b) => b.score - a.score);
+
+    io.to(socket.roomId).emit('game-over', {
+      players: playersArr,
+      winner: playersArr[0] || null,
+      forcedEnd: true
+    });
+
+    // Очищаем сессии
+    localStorage
+
+    console.log(`Игра в комнате ${socket.roomId} принудительно завершена ведущим`);
+
+    // Удаляем комнату через 30 секунд
+    setTimeout(() => {
+      rooms.delete(socket.roomId);
+      console.log(`Комната ${socket.roomId} удалена после завершения`);
+    }, 30000);
+  });
+  
   // --- Очки ---
   socket.on('adjust-score', (data) => {
     const room = getRoom();
