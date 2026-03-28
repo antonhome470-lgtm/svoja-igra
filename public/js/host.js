@@ -125,6 +125,27 @@ function exitGame() {
 }
 
 function confirmExit() {
+  function endGameConfirm() {
+  const modal = document.createElement('div');
+  modal.className = 'exit-modal';
+  modal.innerHTML = `
+    <div class="exit-modal-content">
+      <h2>⛔ Завершить игру?</h2>
+      <p>Игра будет завершена для ВСЕХ игроков.<br>Будут показаны итоговые результаты.<br>Это действие нельзя отменить!</p>
+      <div class="exit-modal-buttons">
+        <button class="btn btn-danger" onclick="endGameNow()">⛔ Завершить для всех</button>
+        <button class="btn btn-secondary" onclick="this.closest('.exit-modal').remove()">Отмена</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
+function endGameNow() {
+  const modal = document.querySelector('.exit-modal');
+  if (modal) modal.remove();
+  socket.emit('force-end-game');
+}
   // НЕ удаляем сессию — чтобы можно было вернуться!
   window.location.href = '/';
 }
