@@ -33,11 +33,15 @@ let isAutoHost = false;
   document.getElementById('room-code').textContent = roomId;
   document.getElementById('my-name').textContent = myName;
 
+  // Проверяем сохранённую сессию
   sessionId = localStorage.getItem(`session_${roomId}`);
 
   if (sessionId) {
+    // Пробуем переподключиться
+    console.log('Пробуем переподключение, sessionId:', sessionId);
     socket.emit('player-reconnect', { sessionId, roomId });
   } else {
+    // Новый вход
     socket.emit('join-room', { roomId, name: myName });
   }
 })();
@@ -60,8 +64,9 @@ function exitGame() {
 }
 
 function confirmExit() {
-  localStorage.removeItem(`session_${roomId}`);
-  localStorage.removeItem(`name_${roomId}`);
+  // НЕ удаляем сессию — чтобы можно было вернуться!
+  // localStorage.removeItem(`session_${roomId}`);  ← закомментировано
+  // localStorage.removeItem(`name_${roomId}`);     ← закомментировано
   window.location.href = '/';
 }
 
@@ -151,8 +156,10 @@ socket.on('reconnected', (data) => {
 });
 
 socket.on('reconnect-failed', (data) => {
+  console.log('Переподключение не удалось:', data.message);
   localStorage.removeItem(`session_${roomId}`);
   sessionId = null;
+  // Пробуем войти как новый игрок
   socket.emit('join-room', { roomId, name: myName });
 });
 
@@ -161,7 +168,12 @@ socket.on('player-reconnected', (data) => {
 });
 
 socket.on('connect', () => {
-  if (sessionId && roomId) socket.emit('player-reconnect', { sessionId, roomId });
+  console.log('Socket подключён:', socket.id);
+  // Если есть сессия — переподключаемся
+  if (sessionId && roomId) {
+    console.log('Авто-переподключение...');
+    socket.emit('player-reconnect', { sessionId, roomId });
+  }
 });
 
 socket.on('disconnect', () => {
