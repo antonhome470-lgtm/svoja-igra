@@ -976,6 +976,68 @@ io.on('connection', (socket) => {
     }
   });
 
+    // --- Игрок пропускает ответ ---
+  socket.on('skip-my-answer', () => {
+    const room = getRoom();
+    if (!room) return;
+    const sessId = getSessionId();
+    if (room.currentAnsweringPlayer !== sessId) return;
+
+    clearTimeout(room.timer);
+
+    const player = room.players.get(sessId);
+    room.currentAnsweringPlayer = null;
+
+    // НЕ снимаем очки — просто пропуск
+    io.to(room.id).emit('answer-skipped', {
+      playerId: sessId,
+      playerName: player.name,
+      players: room.getPlayersArray()
+    });
+
+    if (room.autoHost) {
+      // В авто-режиме: проверяем остались ли игроки
+      room.wrongAnswers.add(sessId); // Чтобы не мог снова нажать кнопку
+
+      if (room.catInBagTarget) {
+        endQuestion(room);
+        return;
+      }
+
+      const active = Array.from(room.players.keys()).filter(id => !room.wrongAnswers.has(id));
+      if (active.length === 0) {
+        endQuestion(room);
+      } else {
+        room.state = 'question';
+        room.buzzerLocked = false;
+        io.to(room.id).emit('buzzer-unlocked');
+        room.questionTimer = setTimeout(() => {
+          if (room.state === 'question') endQuestion(room);
+        }, 10000);
+      }
+    } else {
+      // Живой ведущий: сообщаем ведущему
+      io.to(room.getHostSocketId()).emit('player-skipped', {
+        playerId: sessId,
+        playerName: player.name
+      });
+
+      room.wrongAnswers.add(sessId);
+
+      const active = Array.from(room.players.keys()).filter(id => !room.wrongAnswers.has(id));
+      if (active.length === 0) {
+        endQuestion(room);
+      } else {
+        room.state = 'question';
+        room.buzzerLocked = false;
+        io.to(room.id).emit('buzzer-unlocked');
+        room.questionTimer = setTimeout(() => {
+          if (room.state === 'question') endQuestion(room);
+        }, 10000);
+      }
+    }
+  });
+  
   // --- Оценка (живой ведущий) ---
   socket.on('judge-answer', (data) => {
     const room = getRoom();
