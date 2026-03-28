@@ -544,14 +544,22 @@ io.on('connection', (socket) => {
     console.log(`Авто-комната ${roomId} создана для ${data.playerName}`);
   });
 
-  // --- Переподключение ведущего ---
+    // --- Переподключение ведущего ---
   socket.on('host-reconnect', (data) => {
     const room = rooms.get(data.roomId);
-    if (!room) { socket.emit('reconnect-failed', { message: 'Комната не найдена' }); return; }
-    if (room.hostSessionId !== data.sessionId) { socket.emit('reconnect-failed', { message: 'Неверная сессия' }); return; }
+    if (!room) {
+      socket.emit('reconnect-failed', { message: 'Комната не найдена' });
+      return;
+    }
+    if (room.hostSessionId !== data.sessionId) {
+      socket.emit('reconnect-failed', { message: 'Неверная сессия' });
+      return;
+    }
 
+    // Обновляем socketId ведущего
     room.hostId = socket.id;
     room.playerSocketMap.set(data.sessionId, socket.id);
+
     socket.join(data.roomId);
     socket.roomId = data.roomId;
     socket.sessionId = data.sessionId;
@@ -655,10 +663,12 @@ io.on('connection', (socket) => {
   }
 
   // --- Полное состояние: ведущий ---
-  function sendFullStateToHost(socket, room) {
+    function sendFullStateToHost(socket, room) {
     socket.emit('reconnected-host', {
-      roomId: room.id, sessionId: room.hostSessionId,
-      state: room.state, players: room.getPlayersArray()
+      roomId: room.id,
+      sessionId: room.hostSessionId,
+      state: room.state,
+      players: room.getPlayersArray()
     });
 
     switch (room.state) {
