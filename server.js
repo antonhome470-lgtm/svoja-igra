@@ -1103,12 +1103,11 @@ io.on('connection', (socket) => {
     io.to(socket.roomId).emit('game-over', { players: pa, winner: pa[0] });
   });
 
-    // --- Принудительное завершение игры ---
+      // --- Принудительное завершение игры ---
   socket.on('force-end-game', () => {
     const room = getRoom();
     if (!room || !socket.isHost) return;
 
-    // Очищаем таймеры
     clearTimeout(room.timer);
     clearTimeout(room.questionTimer);
     clearTimeout(room.autoStartTimer);
@@ -1123,12 +1122,8 @@ io.on('connection', (socket) => {
       forcedEnd: true
     });
 
-    // Очищаем сессии
-    localStorage
-
     console.log(`Игра в комнате ${socket.roomId} принудительно завершена ведущим`);
 
-    // Удаляем комнату через 30 секунд
     setTimeout(() => {
       rooms.delete(socket.roomId);
       console.log(`Комната ${socket.roomId} удалена после завершения`);
