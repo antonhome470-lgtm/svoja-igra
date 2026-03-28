@@ -467,6 +467,14 @@ function showAnswerOptions(options) {
   // Вставляем после buzzer-area
   const buzzerArea = document.getElementById('buzzer-area');
   buzzerArea.parentNode.insertBefore(container, buzzerArea.nextSibling);
+
+    // Кнопка пропуска для вариантов
+  const skipBtn = document.createElement('button');
+  skipBtn.className = 'btn btn-secondary';
+  skipBtn.style.cssText = 'margin-top: 10px; width: 100%; grid-column: 1 / -1;';
+  skipBtn.textContent = '⏭️ Пропустить';
+  skipBtn.onclick = () => skipAnswer();
+  container.appendChild(skipBtn);
 }
 
 function selectOption(btn, answer, container) {
@@ -493,6 +501,23 @@ function sendTextAnswer() {
   document.getElementById('buzzer-status').textContent = '📩 Ответ отправлен!';
   clearAnswerTimer();
   if (navigator.vibrate) navigator.vibrate(100);
+}
+
+function skipAnswer() {
+  socket.emit('skip-my-answer');
+
+  const input = document.getElementById('answer-text-input');
+  if (input) input.disabled = true;
+  document.getElementById('send-answer-btn').disabled = true;
+  document.getElementById('skip-answer-btn').disabled = true;
+  document.getElementById('buzzer-status').textContent = '⏭️ Пропущено';
+  document.getElementById('answer-input-area').classList.add('hidden');
+
+  const optArea = document.getElementById('answer-options-area');
+  if (optArea) optArea.remove();
+
+  clearAnswerTimer();
+  if (navigator.vibrate) navigator.vibrate(50);
 }
 
 document.addEventListener('keydown', (e) => {
