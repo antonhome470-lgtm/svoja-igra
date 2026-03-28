@@ -588,6 +588,19 @@ socket.on('answer-result', (data) => {
   }
 });
 
+// ===== ОТВЕТ ПРОПУЩЕН =====
+socket.on('answer-skipped', (data) => {
+  players = data.players;
+  renderPlayersBar();
+  clearAnswerTimer();
+  document.getElementById('answer-input-area').classList.add('hidden');
+  const optArea = document.getElementById('answer-options-area');
+  if (optArea) optArea.remove();
+
+  showNotification(`⏭️ ${data.playerName} пропустил`, 'info', 2000);
+});
+
+
 socket.on('auto-wrong-detail', (data) => {
   // Показываем только чей ответ был неправильным, БЕЗ правильного ответа
   showNotification(`❌ ${data.playerName} ответил неверно`, 'error', 3000);
