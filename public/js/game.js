@@ -720,10 +720,16 @@ socket.on('auto-final-results', (data) => {
 });
 
 // ===== GAME OVER =====
+
 socket.on('game-over', (data) => {
   if (finalTimerInterval) clearInterval(finalTimerInterval);
   clearAnswerTimer(); clearQuestionTimer();
+  // Уведомление если игра завершена принудительно
+  if (data.forcedEnd) {
+    showNotification('⛔ Ведущий завершил игру!', 'error', 5000);
+  }
   localStorage.removeItem(`session_${roomId}`);
+  localStorage.removeItem(`name_${roomId}`);
   hideAllScreens();
   const s = document.getElementById('results-screen'); s.classList.remove('hidden');
   let h = '<div class="results-title">🏆 Итоги игры</div>';
